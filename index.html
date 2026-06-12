@@ -803,8 +803,7 @@ function irPara(pg){
   if(pg===3&&!form.tipo){alert('Selecione o tipo de bem!');return;}
   if(pg===4&&!form.bem){alert('Selecione o bem!');return;}
   if(pg===5){
-    form.operacao=document.getElementById('operacao').value.trim();
-    if(!form.operacao){alert('Informe a operação!');return;}
+    if(!form.operacao){alert('Selecione a operação!');return;}
     const litrosVal=document.getElementById('litros').value.trim();
     if(!litrosVal||parseFloat(litrosVal)<=0){alert('Informe os litros!');return;}
     if(!document.getElementById('responsavel').value.trim()){alert('Informe o responsável!');return;}
