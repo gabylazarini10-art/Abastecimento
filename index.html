@@ -605,7 +605,7 @@ function renderFiltrosFazenda(){
 }
 function renderOpcoesOperacao(){
   let html = LISTAS.operacoes.map(o=>
-    `<label class="opt" onclick="selOperacao(this,${JSON.stringify(o)})"><input type="radio" name="operacao"><div class="opt-circle"></div><span class="opt-label">${o}</span></label>`
+    `<label class="opt" onclick='selOperacao(this,${JSON.stringify(o)})'><input type="radio" name="operacao"><div class="opt-circle"></div><span class="opt-label">${o}</span></label>`
   ).join('');
   html += `<label class="opt" onclick="selOperacaoOutra(this)"><input type="radio" name="operacao"><div class="opt-circle"></div><span class="opt-label">Outra</span></label>`;
   document.getElementById('opts-operacao').innerHTML = html;
