@@ -1207,11 +1207,22 @@ window.configurarSync = function(){
   }catch(e){ alert('Não consegui ler esse texto como configuração válida. Cole exatamente o objeto { ... } do Firebase, com aspas duplas.'); }
 };
 
+const FIREBASE_CONFIG_PADRAO = {
+  apiKey: "AIzaSyBibuKa7STpnpgCEH9YaeJ2Fnw4-9HHyFs",
+  authDomain: "abastecimento---agro-lazarini.firebaseapp.com",
+  databaseURL: "https://abastecimento---agro-lazarini-default-rtdb.firebaseio.com",
+  projectId: "abastecimento---agro-lazarini",
+  storageBucket: "abastecimento---agro-lazarini.firebasestorage.app",
+  messagingSenderId: "834315143286",
+  appId: "1:834315143286:web:cd0701532a3207a55f7757"
+};
+
 async function initSync(){
   const cfgStr = localStorage.getItem('abast_firebase_config');
-  if(!cfgStr){ atualizarStatusSync(); return; }
+  let cfg;
+  try{ cfg = cfgStr ? JSON.parse(cfgStr) : FIREBASE_CONFIG_PADRAO; }
+  catch(e){ cfg = FIREBASE_CONFIG_PADRAO; }
   try{
-    const cfg = JSON.parse(cfgStr);
     const app = initializeApp(cfg);
     window.SYNC = { ativo:true, db:getDatabase(app) };
     escutarRemoto();
