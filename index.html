@@ -167,6 +167,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .sub-tab-bar{display:flex;gap:0;border-bottom:2px solid var(--bd);margin-bottom:14px}
 .sub-tab-btn{flex:1;padding:9px 4px;font-size:12px;font-weight:600;background:none;border:none;cursor:pointer;color:var(--tx3);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;font-family:inherit}
 .sub-tab-btn.active{color:var(--verde);border-bottom-color:var(--verde)}
+
+/* PDF / Impressão */
+@media print {
+  body * { visibility: hidden; }
+  #print-area, #print-area * { visibility: visible; }
+  #print-area { position: absolute; top: 0; left: 0; width: 100%; padding: 16px; }
+  .painel-stats { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .card { page-break-inside: avoid; }
+  .print-header { display: block !important; }
+  @page { margin: 10mm; }
+}
+.print-header { display: none; }
 </style>
 </head>
 <body>
@@ -201,10 +213,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="hist-wrapper">
     <div class="hist-toolbar">
       <input class="search-inp" type="search" id="hist-busca" placeholder="🔍 Buscar bem, operação, responsável..." oninput="renderHistoricoMain()">
-      <div class="filter-row">
-        <select class="filter-select" id="hist-fil-safra" onchange="renderHistoricoMain()">
-          <option value="">Todas as safras</option>
-        </select>
+      <div class="filter-row" style="flex-wrap:wrap;gap:6px;align-items:center">
         <select class="filter-select" id="hist-fil-fazenda" onchange="renderHistoricoMain()">
           <option value="">Todas as fazendas</option>
         </select>
@@ -219,6 +228,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <option>MOTOCICLETA</option>
           <option>CARRETINHA DE DIESEL</option>
         </select>
+        <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:200px">
+          <input class="filter-select" type="date" id="hist-data-ini" onchange="renderHistoricoMain()" style="flex:1">
+          <span style="font-size:11px;color:var(--tx3)">até</span>
+          <input class="filter-select" type="date" id="hist-data-fim" onchange="renderHistoricoMain()" style="flex:1">
+        </div>
       </div>
     </div>
     <div class="hist-count" id="hist-count-main"></div>
@@ -234,7 +248,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <!-- Steps bar -->
   <div class="steps" id="steps-bar"></div>
 
-  <!-- PG 1: Fazenda + Data + Safra -->
+  <!-- PG 1: Fazenda + Data + Responsável -->
   <div class="page active" id="pg1">
     <div class="card">
       <span class="field-label">Fazenda <span class="req">*</span></span>
@@ -243,12 +257,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card">
       <span class="field-label">Data <span class="req">*</span></span>
       <input class="inp" type="date" id="data" onchange="form.data=this.value">
-      <span class="field-label" style="margin-top:14px">Safra <span class="req">*</span></span>
-      <div class="options" id="opts-safra"></div>
+      <span class="field-label" style="margin-top:14px">Responsável <span class="req">*</span></span>
+      <input class="inp" type="text" id="responsavel" placeholder="Nome do responsável" oninput="form.responsavel=this.value">
     </div>
     <div class="btn-wrap"><button class="btn btn-next" onclick="irPara(2)">Próximo →</button></div>
   </div>
-
   <!-- PG 2: Tipo de bem -->
   <div class="page" id="pg2">
     <div class="card">
@@ -266,7 +279,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="btn-wrap">
       <button class="btn btn-back" onclick="irPara(1)">← Voltar</button>
-      <button class="btn btn-next" onclick="irPara(3)">Próximo →</button>
     </div>
   </div>
 
@@ -278,7 +290,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="btn-wrap">
       <button class="btn btn-back" onclick="irPara(2)">← Voltar</button>
-      <button class="btn btn-next" onclick="irPara(4)">Próximo →</button>
     </div>
   </div>
 
@@ -289,13 +300,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="opts-grid" id="opts-operacao"></div>
       <input class="inp" type="text" id="operacao-outra" placeholder="Digite a operação" style="display:none;margin-top:8px" oninput="form.operacao=this.value">
     </div>
+    <div class="card" id="card-talhao" style="display:none">
+      <span class="field-label">Talhão <span style="color:var(--tx3);font-weight:400;font-size:10.5px">(opcional)</span></span>
+      <div class="options" id="opts-talhao"></div>
+    </div>
     <div class="card">
       <span class="field-label" id="lbl-hodhor">Horímetro / Hodômetro</span>
       <input class="inp" type="number" id="hodhor" placeholder="Leitura atual">
       <span class="field-label" style="margin-top:14px">Litros abastecidos <span class="req">*</span></span>
       <input class="inp" type="number" id="litros" placeholder="0.0" step="0.1" min="0">
-      <span class="field-label" style="margin-top:14px">Responsável <span class="req">*</span></span>
-      <input class="inp" type="text" id="responsavel" placeholder="Nome do responsável">
     </div>
     <div class="btn-wrap">
       <button class="btn btn-back" onclick="irPara(3)">← Voltar</button>
@@ -343,18 +356,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- Painel -->
     <div id="subtab-content-painel">
-      <div class="filter-row-painel">
-        <select class="filter-select" id="painel-safra" onchange="renderPainel()">
-          <option value="">Todas as safras</option>
-        </select>
-        <select class="filter-select" id="painel-fazenda" onchange="renderPainel()">
+      <div class="filter-row-painel" style="display:flex;justify-content:space-between;align-items:center">
+        <select class="filter-select" id="painel-fazenda" onchange="renderPainel()" style="flex:1;margin-right:8px">
           <option value="">Todas as fazendas</option>
         </select>
+        <button onclick="exportarPDF()" style="background:var(--verde);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">📄 PDF</button>
       </div>
-      <div class="painel-stats" id="painel-stats"></div>
-      <div class="card" id="painel-tipo" style="margin-bottom:12px"></div>
-      <div class="card" id="painel-op" style="margin-bottom:12px"></div>
-      <div class="card" id="painel-lista"></div>
+      <div class="inp-row" style="margin-bottom:12px">
+        <div>
+          <label style="font-size:10px;color:var(--tx3);margin-bottom:3px;display:block">DE</label>
+          <input class="inp" type="date" id="painel-data-ini" onchange="renderPainel()">
+        </div>
+        <div>
+          <label style="font-size:10px;color:var(--tx3);margin-bottom:3px;display:block">ATÉ</label>
+          <input class="inp" type="date" id="painel-data-fim" onchange="renderPainel()">
+        </div>
+      </div>
+      <div id="print-area">
+        <div class="print-header" style="margin-bottom:16px;border-bottom:2px solid var(--verde);padding-bottom:10px">
+          <div style="font-size:16px;font-weight:700;color:var(--verde)">Agro Lazarini — Análise de Abastecimento</div>
+          <div style="font-size:11px;color:var(--tx3)" id="print-subtitulo"></div>
+        </div>
+        <div class="painel-stats" id="painel-stats"></div>
+        <div class="card" id="painel-tipo" style="margin-bottom:12px"></div>
+        <div class="card" id="painel-talhao" style="margin-bottom:12px"></div>
+        <div class="card" id="painel-op" style="margin-bottom:12px"></div>
+        <div class="card" id="painel-lista"></div>
+      </div>
     </div>
 
     <!-- Exportar -->
@@ -362,9 +390,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="export-section">
         <div class="export-section-title">Filtros de exportação</div>
         <div class="filter-row" style="margin-bottom:8px">
-          <select class="filter-select" id="exp-fil-safra" onchange="atualizarTagsExport()">
-            <option value="">Todas as safras</option>
-          </select>
           <select class="filter-select" id="exp-fil-fazenda" onchange="atualizarTagsExport()">
             <option value="">Todas as fazendas</option>
           </select>
@@ -383,19 +408,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="hist-count" id="exp-count"></div>
       </div>
       <div class="export-section">
-        <div class="export-section-title">Colunas a exportar</div>
-        <label class="export-option"><input type="checkbox" id="col-data" checked><div><div class="export-option-label">Data</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-safra" checked><div><div class="export-option-label">Safra</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-fazenda" checked><div><div class="export-option-label">Fazenda</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-tipo" checked><div><div class="export-option-label">Tipo de Bem</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-bem" checked><div><div class="export-option-label">Bem</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-operacao" checked><div><div class="export-option-label">Operação</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-litros" checked><div><div class="export-option-label">Litros</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-hodhor" checked><div><div class="export-option-label">Horímetro / Hodômetro</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-responsavel" checked><div><div class="export-option-label">Responsável</div></div></label>
-        <label class="export-option"><input type="checkbox" id="col-datahora"><div><div class="export-option-label">Data/Hora do Registro</div></div></label>
+        <div class="export-section-title">Formato do arquivo</div>
+        <p style="font-size:11px;color:var(--tx2);line-height:1.5;margin:0">O arquivo é baixado no formato <strong>.xls</strong> (Excel). Ao abrir, você verá uma tabela já formatada com cabeçalho colorido, linhas alternadas e linha de total no final — pronto para usar.</p>
       </div>
-      <button class="btn-export-full" onclick="exportarCSVFiltrado()">⬇ Baixar CSV</button>
+      <button class="btn-export-full" onclick="exportarCSVFiltrado()">⬇ Baixar Excel (.xls)</button>
     </div>
 
     <!-- QR -->
@@ -474,7 +490,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="modal-field">
       <label>Fazenda</label>
-      <select class="inp" id="edit-fazenda"></select>
+      <select class="inp" id="edit-fazenda" onchange="atualizarTalhoesEdicao()"></select>
+    </div>
+    <div class="modal-field">
+      <label>Talhão</label>
+      <select class="inp" id="edit-talhao"></select>
     </div>
     <div class="modal-field">
       <label>Safra</label>
@@ -550,6 +570,21 @@ if(localStorage.getItem('abast_listas_versao')!==LISTAS_VERSAO){
 if(!localStorage.getItem('abast_listas')) localStorage.setItem('abast_listas', JSON.stringify(LISTAS));
 function salvarListas(){ localStorage.setItem('abast_listas', JSON.stringify(LISTAS)); }
 
+const TALHOES_PADRAO = {
+  'São José 1': [],
+  'São José 2': [],
+  'Minuano': [],
+};
+const NAO_SE_APLICA = 'Não se aplica';
+let TALHOES = JSON.parse(localStorage.getItem('abast_talhoes')||'null') || JSON.parse(JSON.stringify(TALHOES_PADRAO));
+function salvarTalhoes(){ localStorage.setItem('abast_talhoes', JSON.stringify(TALHOES)); }
+function garantirTalhoesFazendas(){
+  let mudou=false;
+  LISTAS.fazendas.forEach(f=>{ if(!TALHOES[f]){ TALHOES[f]=[]; mudou=true; } });
+  if(mudou) salvarTalhoes();
+}
+garantirTalhoesFazendas();
+
 const HOD_LABEL = {
   'CAMINHONETE':'Hodômetro (km)','CAMINHÃO':'Hodômetro (km)','MOTOCICLETA':'Hodômetro (km)',
   'TRATOR':'Horímetro (h)','COLHEITADEIRA':'Horímetro (h)','PULVERIZADOR':'Horímetro (h)',
@@ -572,7 +607,7 @@ const HOD_LABEL = {
 })();
 
 // ══════════ ESTADO ══════════
-const form = {fazenda:'',data:'',safra:'',tipo:'',bem:'',operacao:'',hodhor:'',litros:'',responsavel:''};
+const form = {fazenda:'',talhao:'',data:'',safra:'',tipo:'',bem:'',operacao:'',hodhor:'',litros:'',responsavel:''};
 let paginaAtual = 1;
 
 // Data padrão = hoje
@@ -586,8 +621,28 @@ function renderOpcoesFazenda(){
   ).join('');
   document.getElementById('edit-fazenda').innerHTML = LISTAS.fazendas.map(f=>`<option>${f}</option>`).join('');
 }
+function renderOpcoesTalhao(){
+  const cont = document.getElementById('opts-talhao');
+  const card = document.getElementById('card-talhao');
+  if(!cont) return;
+  const fazenda = form.fazenda;
+  const lista = fazenda ? (TALHOES[fazenda]||[]) : [];
+  form.talhao = NAO_SE_APLICA;
+  if(!fazenda || lista.length===0){
+    if(card) card.style.display='none';
+    return;
+  }
+  if(card) card.style.display='';
+  let html = lista.map(t=>
+    `<label class="opt" onclick="sel(this,'talhao')"><input type="radio" name="talhao" value="${t}"><div class="opt-circle"></div><span class="opt-label">${t}</span></label>`
+  ).join('');
+  html += `<label class="opt selected" onclick="sel(this,'talhao')"><input type="radio" name="talhao" value="${NAO_SE_APLICA}" checked><div class="opt-circle"></div><span class="opt-label">${NAO_SE_APLICA}</span></label>`;
+  cont.innerHTML = html;
+}
 function renderOpcoesSafra(){
-  document.getElementById('opts-safra').innerHTML = LISTAS.safras.map(s=>
+  const el = document.getElementById('opts-safra');
+  if(!el) return;
+  el.innerHTML = LISTAS.safras.map(s=>
     `<label class="opt" onclick="sel(this,'safra')"><input type="radio" name="safra" value="${s}"><div class="opt-circle"></div><span class="opt-label">Safra ${s}</span></label>`
   ).join('');
 }
@@ -707,39 +762,52 @@ const CONFIG_LABELS = {
 };
 function configGetLista(chave){
   if(chave.startsWith('lista:')) return LISTAS[chave.split(':')[1]];
+  if(chave.startsWith('talhao:')) return TALHOES[chave.slice(7)];
   return BENS[chave];
 }
 function configGetPadrao(chave){
   if(chave.startsWith('lista:')) return LISTAS_PADRAO[chave.split(':')[1]];
+  if(chave.startsWith('talhao:')) return TALHOES_PADRAO[chave.slice(7)]||[];
   return BENS_PADRAO[chave];
 }
+function configGetLabel(chave){
+  if(chave.startsWith('talhao:')) return 'Talhões — '+chave.slice(7);
+  return CONFIG_LABELS[chave]||chave;
+}
 function configSalvar(chave){
-  if(chave.startsWith('lista:')) salvarListas(); else salvarBens();
+  if(chave.startsWith('lista:')) salvarListas();
+  else if(chave.startsWith('talhao:')) salvarTalhoes();
+  else salvarBens();
 }
 function configAposMudar(chave){
-  if(chave==='lista:fazendas'){ renderOpcoesFazenda(); renderFiltrosFazenda(); }
+  if(chave==='lista:fazendas'){ renderOpcoesFazenda(); renderFiltrosFazenda(); garantirTalhoesFazendas(); iniciarConfig(); }
   if(chave==='lista:safras'){ renderOpcoesSafra(); }
   if(chave==='lista:operacoes'){ renderOpcoesOperacao(); renderOperacoesDatalist(); }
+  if(chave.startsWith('talhao:')) renderOpcoesTalhao();
 }
 
 function iniciarConfig(){
+  garantirTalhoesFazendas();
   const selTipo = document.getElementById('config-tipo');
-  if(selTipo.options.length===0){
-    let html = '<optgroup label="Listas gerais">';
-    Object.keys(CONFIG_LABELS).forEach(k=>{ html += `<option value="${k}">${CONFIG_LABELS[k]}</option>`; });
-    html += '</optgroup><optgroup label="Bens por categoria">';
-    Object.keys(BENS).forEach(t=>{ html += `<option value="${t}">${t}</option>`; });
-    html += '</optgroup>';
-    selTipo.innerHTML = html;
-  }
+  const valorAnterior = selTipo.value;
+  let html = '<optgroup label="Listas gerais">';
+  Object.keys(CONFIG_LABELS).forEach(k=>{ html += `<option value="${k}">${CONFIG_LABELS[k]}</option>`; });
+  html += '</optgroup><optgroup label="Bens por categoria">';
+  Object.keys(BENS).forEach(t=>{ html += `<option value="${t}">${t}</option>`; });
+  html += '</optgroup><optgroup label="Talhões por fazenda">';
+  LISTAS.fazendas.forEach(f=>{ html += `<option value="talhao:${f}">${f}</option>`; });
+  html += '</optgroup>';
+  selTipo.innerHTML = html;
+  if([...selTipo.options].some(o=>o.value===valorAnterior)) selTipo.value = valorAnterior;
   renderConfigItens();
 }
 function renderConfigItens(){
   const chave = document.getElementById('config-tipo').value;
   const lista = configGetLista(chave)||[];
-  const ehBem = !chave.startsWith('lista:');
-  document.getElementById('config-lista-titulo').textContent = ehBem ? 'Bens nesta categoria' : 'Itens';
-  document.getElementById('config-novo-bem').placeholder = ehBem ? 'Nome do novo bem (ex: TRATOR 16)' : 'Novo item';
+  const ehTalhao = chave.startsWith('talhao:');
+  const ehBem = !chave.startsWith('lista:') && !ehTalhao;
+  document.getElementById('config-lista-titulo').textContent = ehBem ? 'Bens nesta categoria' : ehTalhao ? 'Talhões desta fazenda' : 'Itens';
+  document.getElementById('config-novo-bem').placeholder = ehBem ? 'Nome do novo bem (ex: TRATOR 16)' : ehTalhao ? 'Nome do talhão (ex: Talhão 5)' : 'Novo item';
   const cont = document.getElementById('config-lista-bens');
   if(lista.length===0){
     cont.innerHTML = '<p style="font-size:12px;color:var(--tx3)">Nenhum item cadastrado nesta lista.</p>';
@@ -776,9 +844,10 @@ function removerItemConfig(indice){
 }
 function restaurarItensConfig(){
   const chave = document.getElementById('config-tipo').value;
-  if(!confirm(`Restaurar a lista padrão de "${CONFIG_LABELS[chave]||chave}"? Isso desfaz suas alterações nesta lista.`)) return;
+  if(!confirm(`Restaurar a lista padrão de "${configGetLabel(chave)}"? Isso desfaz suas alterações nesta lista.`)) return;
   const padrao = configGetPadrao(chave)||[];
   if(chave.startsWith('lista:')) LISTAS[chave.split(':')[1]] = JSON.parse(JSON.stringify(padrao));
+  else if(chave.startsWith('talhao:')) TALHOES[chave.slice(7)] = JSON.parse(JSON.stringify(padrao));
   else BENS[chave] = JSON.parse(JSON.stringify(padrao));
   configSalvar(chave);
   configAposMudar(chave);
@@ -798,19 +867,25 @@ renderSteps();
 
 // ══════════ NAVEGAÇÃO FORMULÁRIO ══════════
 function irPara(pg){
+  if(pg===2){
+    form.data = document.getElementById('data').value;
+    form.responsavel = document.getElementById('responsavel').value.trim();
+  }
   if(pg===2&&!form.fazenda){alert('Selecione a fazenda!');return;}
-  if(pg===2&&!form.safra){alert('Selecione a safra!');return;}
+  if(pg===2&&!form.data){alert('Informe a data!');return;}
+  if(pg===2&&!form.responsavel){alert('Informe o responsável!');return;}
   if(pg===3&&!form.tipo){alert('Selecione o tipo de bem!');return;}
   if(pg===4&&!form.bem){alert('Selecione o bem!');return;}
   if(pg===5){
     if(!form.operacao){alert('Selecione a operação!');return;}
     const litrosVal=document.getElementById('litros').value.trim();
     if(!litrosVal||parseFloat(litrosVal)<=0){alert('Informe os litros!');return;}
-    if(!document.getElementById('responsavel').value.trim()){alert('Informe o responsável!');return;}
     form.hodhor=document.getElementById('hodhor').value;
     form.litros=litrosVal;
-    form.responsavel=document.getElementById('responsavel').value.trim();
     gerarResumo();
+  }
+  if(pg===4){
+    renderOpcoesTalhao();
   }
   if(pg===3){
     form.bem='';
@@ -832,14 +907,17 @@ function sel(el, campo){
   el.closest('.options,.opts-grid').querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));
   el.classList.add('selected');
   form[campo]=val;
+  // Avanço automático ao selecionar tipo ou bem
+  if(campo==='tipo') setTimeout(()=>irPara(3), 150);
+  if(campo==='bem')  setTimeout(()=>irPara(4), 150);
 }
 
 // ══════════ RESUMO ══════════
 function gerarResumo(){
   const campos=[
     ['Fazenda',form.fazenda],
+    ['Talhão',form.talhao||NAO_SE_APLICA],
     ['Data',form.data?new Date(form.data+'T12:00:00').toLocaleDateString('pt-BR'):'—'],
-    ['Safra',form.safra],
     ['Tipo de bem',form.tipo],
     ['Bem',form.bem],
     ['Operação',form.operacao],
@@ -877,29 +955,29 @@ function novoRegistro(){
   document.getElementById('operacao-outra').value='';
   document.getElementById('operacao-outra').style.display='none';
   document.querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));
+  const cardT=document.getElementById('card-talhao');
+  if(cardT) cardT.style.display='none';
   irPara(1);
 }
 
 // ══════════ HISTÓRICO PRINCIPAL ══════════
 function iniciarHistoricoMain(){
-  const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
-  const safras=[...new Set(hist.map(r=>r.safra).filter(Boolean))].sort().reverse();
-  const sel=document.getElementById('hist-fil-safra');
-  const cv=sel.value;
-  sel.innerHTML='<option value="">Todas as safras</option>'+safras.map(s=>`<option value="${s}"${s===cv?' selected':''}}>${s}</option>`).join('');
   renderHistoricoMain();
 }
 
 function renderHistoricoMain(){
   const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
   const busca=(document.getElementById('hist-busca').value||'|').toLowerCase();
-  const filSafra=(document.getElementById('hist-fil-safra')||{}).value||'';  const filFazenda=(document.getElementById('hist-fil-fazenda')||{}).value||'';  const filTipo=(document.getElementById('hist-fil-tipo')||{}).value||'';
+  const filFazenda=(document.getElementById('hist-fil-fazenda')||{}).value||'';
+  const filTipo=(document.getElementById('hist-fil-tipo')||{}).value||'';
+  const dataIni=(document.getElementById('hist-data-ini')||{}).value||'';
+  const dataFim=(document.getElementById('hist-data-fim')||{}).value||'';
   const dados=hist.filter(r=>{
-    if(filSafra && r.safra!==filSafra) return false;
     if(filFazenda && r.fazenda!==filFazenda) return false;
     if(filTipo && r.tipo!==filTipo) return false;
+    if(dataIni||dataFim){const d=r.data||'';if(dataIni&&d&&d<dataIni)return false;if(dataFim&&d&&d>dataFim)return false;}
     if(busca!=='|'){
-      const txt=[r.bem,r.tipo,r.operacao,r.responsavel,r.fazenda,r.safra].join(' ').toLowerCase();
+      const txt=[r.bem,r.tipo,r.operacao,r.responsavel,r.fazenda,r.talhao].join(' ').toLowerCase();
       if(!txt.includes(busca)) return false;
     }
     return true;
@@ -918,7 +996,7 @@ function renderHistoricoMain(){
     <div class="hist-item">
       <div class="hist-top">⛽ ${r.bem||r.tipo} — ${r.dataFormatada}</div>
       <div class="hist-det">
-        📍 ${r.fazenda} &nbsp;|&nbsp; Safra ${r.safra||'—'} &nbsp;|&nbsp; ${r.operacao}<br>
+        📍 ${r.fazenda}${r.talhao&&r.talhao!==NAO_SE_APLICA?' • '+r.talhao:(r.safra?' • Safra '+r.safra:'')} &nbsp;|&nbsp; ${r.operacao}<br>
         🔢 ${r.litros}L &nbsp;|&nbsp; ${HOD_LABEL[r.tipo]||'Horímetro'}: ${r.hodhor||'—'}<br>
         👤 ${r.responsavel}
       </div>
@@ -935,7 +1013,7 @@ function abrirEdicao(id){
   const r=hist.find(x=>x.id===id);
   if(!r) return;
   document.getElementById('edit-id').value=id;
-  document.getElementById('edit-data').value=r.data||'';  document.getElementById('edit-fazenda').value=r.fazenda||'';  document.getElementById('edit-safra').value=r.safra||'';  document.getElementById('edit-tipo').value=r.tipo||'TRATOR';  document.getElementById('edit-operacao').value=r.operacao||'';  document.getElementById('edit-hodhor').value=r.hodhor||'';  document.getElementById('edit-litros').value=r.litros||'';  document.getElementById('edit-responsavel').value=r.responsavel||'';  document.getElementById('edit-lbl-hodhor').textContent=HOD_LABEL[r.tipo]||'Horímetro / Hodômetro';  atualizarBensEdicao(r.bem);
+  document.getElementById('edit-data').value=r.data||'';  document.getElementById('edit-fazenda').value=r.fazenda||'';  document.getElementById('edit-safra').value=r.safra||'';  document.getElementById('edit-tipo').value=r.tipo||'TRATOR';  document.getElementById('edit-operacao').value=r.operacao||'';  document.getElementById('edit-hodhor').value=r.hodhor||'';  document.getElementById('edit-litros').value=r.litros||'';  document.getElementById('edit-responsavel').value=r.responsavel||'';  document.getElementById('edit-lbl-hodhor').textContent=HOD_LABEL[r.tipo]||'Horímetro / Hodômetro';  atualizarBensEdicao(r.bem);  atualizarTalhoesEdicao(r.talhao);
   document.getElementById('modal-edit').classList.add('open');
 }
 
@@ -944,6 +1022,12 @@ function atualizarBensEdicao(bemAtual){
   const lista=BENS[tipo]||[];
   document.getElementById('edit-lbl-hodhor').textContent=HOD_LABEL[tipo]||'Horímetro / Hodômetro';
   document.getElementById('edit-bem').innerHTML=lista.map(b=>`<option value="${b}"${b===bemAtual?' selected':''}}>${b}</option>`).join('');
+}
+
+function atualizarTalhoesEdicao(talhaoAtual){
+  const fazenda=document.getElementById('edit-fazenda').value;
+  const lista=(TALHOES[fazenda]||[]).concat([NAO_SE_APLICA]);
+  document.getElementById('edit-talhao').innerHTML=lista.map(t=>`<option value="${t}"${t===talhaoAtual?' selected':''}>${t}</option>`).join('');
 }
 
 function salvarEdicao(){
@@ -957,6 +1041,7 @@ function salvarEdicao(){
     data,
     dataFormatada: data?new Date(data+'T12:00:00').toLocaleDateString('pt-BR'):hist[idx].dataFormatada,
     fazenda: document.getElementById('edit-fazenda').value,
+    talhao: document.getElementById('edit-talhao').value,
     safra: document.getElementById('edit-safra').value,
     tipo: document.getElementById('edit-tipo').value,
     bem: document.getElementById('edit-bem').value,
@@ -981,15 +1066,6 @@ function excluirRegistro(id){
 
 // ══════════ ANÁLISE ══════════
 function iniciarPainelMain(){
-  const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
-  const safras=[...new Set(hist.map(r=>r.safra).filter(Boolean))].sort().reverse();
-  const sel=document.getElementById('painel-safra');
-  const cv=sel.value;
-  sel.innerHTML='<option value="">Todas as safras</option>'+safras.map(s=>`<option value="${s}"${s===cv?' selected':''}}>${s}</option>`).join('');
-  // Exportar safras também
-  const expSel=document.getElementById('exp-fil-safra');
-  const ecv=expSel.value;
-  expSel.innerHTML='<option value="">Todas as safras</option>'+safras.map(s=>`<option value="${s}"${s===ecv?' selected':''}}>${s}</option>`).join('');
   renderPainel();
   atualizarTagsExport();
 }
@@ -1015,16 +1091,30 @@ function renderQR(){
 // ══════════ PAINEL DE ANÁLISE ══════════
 function renderPainel(){
   const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
-  const sf=document.getElementById('painel-safra').value;
   const fz=document.getElementById('painel-fazenda').value;
+  const dataIni=document.getElementById('painel-data-ini').value;
+  const dataFim=document.getElementById('painel-data-fim').value;
   let dados=hist.filter(r=>{
-    if(sf&&r.safra!==sf)return false;
     if(fz&&r.fazenda!==fz)return false;
+    if(dataIni||dataFim){const d=r.data||'';if(dataIni&&d&&d<dataIni)return false;if(dataFim&&d&&d>dataFim)return false;}
     return true;
   });
+
+  // Atualizar subtítulo do PDF
+  const sub=document.getElementById('print-subtitulo');
+  if(sub){
+    const partes=[];
+    if(fz) partes.push('Fazenda: '+fz); else partes.push('Todas as fazendas');
+    if(dataIni) partes.push('De: '+dataIni.split('-').reverse().join('/'));
+    if(dataFim) partes.push('Até: '+dataFim.split('-').reverse().join('/'));
+    partes.push('Gerado em '+new Date().toLocaleDateString('pt-BR'));
+    sub.textContent=partes.join(' · ');
+  }
+
   if(!dados.length){
     document.getElementById('painel-stats').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--tx3);font-size:13px">Nenhum registro encontrado.</div>';
     document.getElementById('painel-tipo').innerHTML='';
+    document.getElementById('painel-talhao').innerHTML='';
     document.getElementById('painel-op').innerHTML='';
     document.getElementById('painel-lista').innerHTML='';
     return;
@@ -1032,62 +1122,277 @@ function renderPainel(){
   const totalL=dados.reduce((s,r)=>s+(parseFloat(r.litros)||0),0);
   const totalReg=dados.length;
   const mediaL=totalL/totalReg;
+
+  // ── BLOCO 1: KPIs ──
+  const maiorBem=maiorConsumidorBem(dados);
   document.getElementById('painel-stats').innerHTML=`
     <div style="background:var(--verde-bg);border:1px solid var(--verde-cl);border-radius:8px;padding:12px;text-align:center">
       <div style="font-size:10px;color:var(--verde-tx);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Total de Litros</div>
       <div style="font-size:20px;font-weight:700;color:var(--verde)">${totalL.toLocaleString('pt-BR',{maximumFractionDigits:1})} L</div>
     </div>
     <div style="background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center">
-      <div style="font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Registros</div>
+      <div style="font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Abastecimentos</div>
       <div style="font-size:20px;font-weight:700;color:var(--tx)">${totalReg}</div>
     </div>
     <div style="background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center">
-      <div style="font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Média por abast.</div>
+      <div style="font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Média/abastecimento</div>
       <div style="font-size:20px;font-weight:700;color:var(--tx)">${mediaL.toLocaleString('pt-BR',{maximumFractionDigits:1})} L</div>
     </div>
-    <div style="background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center">
+    <div style="background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center;overflow:hidden">
       <div style="font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Maior consumidor</div>
-      <div style="font-size:13px;font-weight:700;color:var(--tx)">${maiorConsumidor(dados)}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--tx);line-height:1.3">${maiorBem}</div>
     </div>`;
 
-  // Por tipo
+  // ── BLOCO 2: Pizza por tipo (donut) ──
   const tipos=['TRATOR','COLHEITADEIRA','PULVERIZADOR','CAMINHONETE','CAMINHÃO','COMBOIO','MOTOCICLETA','CARRETINHA DE DIESEL'];
-  const tipoData=tipos.map(t=>({tipo:t,litros:dados.filter(r=>r.tipo===t).reduce((s,r)=>s+(parseFloat(r.litros)||0),0),count:dados.filter(r=>r.tipo===t).length})).filter(x=>x.litros>0).sort((a,b)=>b.litros-a.litros);
-  const maxL=tipoData[0]?.litros||1;
   const icons={'TRATOR':'🚜','COLHEITADEIRA':'🌾','PULVERIZADOR':'💧','CAMINHONETE':'🚙','CAMINHÃO':'🚛','COMBOIO':'⛽','MOTOCICLETA':'🏍️','CARRETINHA DE DIESEL':'🛢️'};
+  const tipoData=tipos.map((t,i)=>({
+    tipo:t,
+    litros:dados.filter(r=>r.tipo===t).reduce((s,r)=>s+(parseFloat(r.litros)||0),0),
+    count:dados.filter(r=>r.tipo===t).length,
+    cor:CHART_COLORS[i%CHART_COLORS.length]
+  })).filter(x=>x.litros>0).sort((a,b)=>b.litros-a.litros);
+  const totalTipo=tipoData.reduce((s,x)=>s+x.litros,0)||1;
   document.getElementById('painel-tipo').innerHTML=`
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:8px">Consumo por tipo</div>
-    ${tipoData.map(x=>{const pct=Math.round(x.litros/maxL*100);return`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:500">${icons[x.tipo]||'⚙'} ${x.tipo}</span><span style="color:var(--tx3)">${x.litros.toLocaleString('pt-BR',{maximumFractionDigits:1})} L (${x.count})</span></div><div style="background:var(--bd);border-radius:99px;height:8px;overflow:hidden"><div style="height:100%;border-radius:99px;background:var(--verde);width:${pct}%"></div></div></div>`;}).join('')}`;
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:12px">🍕 Consumo por tipo — pizza</div>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <canvas id="chart-tipo" style="width:140px;height:140px;flex-shrink:0"></canvas>
+      <div style="flex:1;min-width:130px">
+        ${tipoData.map(x=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="width:10px;height:10px;border-radius:2px;background:${x.cor};flex-shrink:0"></span>
+            <span style="flex:1;font-size:11.5px;font-weight:500">${icons[x.tipo]||'⚙'} ${x.tipo}</span>
+            <span style="font-size:11px;font-weight:700;color:var(--tx3)">${Math.round(x.litros/totalTipo*100)}%</span>
+          </div>
+          <div style="background:var(--bd);border-radius:99px;height:5px;margin-bottom:8px;overflow:hidden">
+            <div style="height:100%;border-radius:99px;background:${x.cor};width:${Math.round(x.litros/totalTipo*100)}%"></div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  desenharDonut(document.getElementById('chart-tipo'), tipoData.map(x=>({valor:x.litros,cor:x.cor})));
 
-  // Por operação (texto livre — agrupar dinâmico)
-  const opMap={};
-  dados.forEach(r=>{if(r.operacao)opMap[r.operacao]=(opMap[r.operacao]||0)+(parseFloat(r.litros)||0);});
-  const opData=Object.entries(opMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const maxOp=opData[0]?.[1]||1;
+  // ── BLOCO 3: Média por Operação — barras horizontais ──
+  // CÁLCULO: para cada operação, soma todos os litros e divide pela qtd de abastecimentos
+  // Ex: Colheita teve 3 abastecimentos de 200, 250, 150L → média = 600/3 = 200L
+  const opGroups={};
+  dados.forEach(r=>{
+    if(!r.operacao)return;
+    if(!opGroups[r.operacao])opGroups[r.operacao]={total:0,count:0};
+    opGroups[r.operacao].total+=(parseFloat(r.litros)||0);
+    opGroups[r.operacao].count++;
+  });
+  const opMediaData=Object.entries(opGroups)
+    .map(([op,v])=>({label:op,valor:v.total/v.count,total:v.total,count:v.count}))
+    .sort((a,b)=>b.valor-a.valor).slice(0,8);
   document.getElementById('painel-op').innerHTML=`
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:8px">Consumo por operação</div>
-    ${opData.map(([op,litros])=>{const pct=Math.round(litros/maxOp*100);return`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="font-weight:500">${op}</span><span style="color:var(--tx3)">${litros.toLocaleString('pt-BR',{maximumFractionDigits:1})} L</span></div><div style="background:var(--bd);border-radius:99px;height:6px;overflow:hidden"><div style="height:100%;border-radius:99px;background:var(--ouro);width:${pct}%"></div></div></div>`;}).join('')}`;
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">📊 Média por operação</div>
+    <div style="font-size:10px;color:var(--tx3);margin-bottom:12px">Litros médios por abastecimento · (total de vezes entre parênteses)</div>
+    <canvas id="chart-op-media" style="width:100%;display:block"></canvas>`;
+  desenharBarrasMedia(document.getElementById('chart-op-media'), opMediaData, getCorCSS('--ouro'));
 
-  // Top bens
-  const bemMap={};
-  dados.forEach(r=>{if(r.bem)bemMap[r.bem]=(bemMap[r.bem]||0)+(parseFloat(r.litros)||0);});
-  const topBens=Object.entries(bemMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  document.getElementById('painel-lista').innerHTML=`
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:8px">Top bens — maior consumo</div>
-    ${topBens.map(([bem,litros],i)=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:${i===0?'var(--verde-bg)':'var(--sf)'};border:1px solid var(--bd);border-radius:7px;margin-bottom:5px;font-size:11px"><span style="font-size:13px;font-weight:700;color:var(--tx3);width:18px;text-align:center">${i+1}</span><span style="flex:1;font-weight:500">${bem}</span><span style="font-weight:700;color:var(--verde)">${litros.toLocaleString('pt-BR',{maximumFractionDigits:1})} L</span></div>`).join('')}`;
+  // ── BLOCO 4: Média por Bem — barras horizontais ──
+  // CÁLCULO: para cada bem (máquina), soma litros e divide pela qtd de abastecimentos dela
+  const bemGroups={};
+  dados.forEach(r=>{
+    if(!r.bem)return;
+    if(!bemGroups[r.bem])bemGroups[r.bem]={total:0,count:0};
+    bemGroups[r.bem].total+=(parseFloat(r.litros)||0);
+    bemGroups[r.bem].count++;
+  });
+  const bemMediaData=Object.entries(bemGroups)
+    .map(([bem,v])=>({label:bem,valor:v.total/v.count,total:v.total,count:v.count}))
+    .sort((a,b)=>b.valor-a.valor).slice(0,8);
+  document.getElementById('painel-talhao').innerHTML=`
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">📊 Média por bem (máquina/veículo)</div>
+    <div style="font-size:10px;color:var(--tx3);margin-bottom:12px">Litros médios por abastecimento de cada máquina · (total de vezes entre parênteses)</div>
+    <canvas id="chart-bem-media" style="width:100%;display:block"></canvas>`;
+  desenharBarrasMedia(document.getElementById('chart-bem-media'), bemMediaData, getCorCSS('--verde'));
+
+  // ── BLOCO 5: Tabela cruzada Operação × Talhão ──
+  const dadosTalhao=dados.filter(r=>r.talhao&&r.talhao!==NAO_SE_APLICA&&r.operacao);
+  if(dadosTalhao.length){
+    const ops=[...new Set(dadosTalhao.map(r=>r.operacao))].sort();
+    const tals=[...new Set(dadosTalhao.map(r=>r.talhao))].sort();
+    const mapa={};
+    dadosTalhao.forEach(r=>{
+      if(!mapa[r.operacao])mapa[r.operacao]={};
+      if(!mapa[r.operacao][r.talhao])mapa[r.operacao][r.talhao]={total:0,count:0};
+      mapa[r.operacao][r.talhao].total+=(parseFloat(r.litros)||0);
+      mapa[r.operacao][r.talhao].count++;
+    });
+    const thS='padding:7px 9px;font-size:10px;text-transform:uppercase;font-weight:600;color:var(--tx3);border-bottom:2px solid var(--bd);white-space:nowrap';
+    const tdS='padding:7px 9px;font-size:11px;border-bottom:1px solid var(--bd);text-align:center';
+    const thead=`<tr><th style="${thS};text-align:left">Operação</th>${tals.map(t=>`<th style="${thS}">${t}</th>`).join('')}</tr>`;
+    const tbody=ops.map(op=>{
+      const cells=tals.map(t=>{
+        const v=mapa[op]&&mapa[op][t];
+        if(!v) return `<td style="${tdS};color:var(--bd)">—</td>`;
+        const media=v.total/v.count;
+        return `<td style="${tdS}"><strong>${media.toLocaleString('pt-BR',{maximumFractionDigits:1})}</strong><br><span style="font-size:9px;color:var(--tx3)">${v.count}x</span></td>`;
+      }).join('');
+      return `<tr><td style="${tdS};text-align:left;font-weight:500">${op}</td>${cells}</tr>`;
+    }).join('');
+    document.getElementById('painel-lista').innerHTML=`
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">📋 Operação × Talhão — média L/abastecimento</div>
+      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">Cada célula = média de litros · número abaixo = quantidade de abastecimentos</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:280px">
+          <thead>${thead}</thead><tbody>${tbody}</tbody>
+        </table>
+      </div>`;
+  }else{
+    document.getElementById('painel-lista').innerHTML=`
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:6px">📋 Operação × Talhão</div>
+      <p style="font-size:12px;color:var(--tx3);margin:0">Cadastre talhões no Config e associe aos abastecimentos para ver esta tabela.</p>`;
+  }
 }
 
-function maiorConsumidor(dados){
-  const m={};dados.forEach(r=>{if(r.tipo)m[r.tipo]=(m[r.tipo]||0)+(parseFloat(r.litros)||0);});
-  const top=Object.entries(m).sort((a,b)=>b[1]-a[1])[0];return top?top[0]:'—';
+function exportarPDF(){
+  // Força re-render para garantir canvases atualizados, depois imprime
+  renderPainel();
+  setTimeout(()=>window.print(), 200);
 }
+
+function maiorConsumidorBem(dados){
+  const m={};dados.forEach(r=>{if(r.bem)m[r.bem]=(m[r.bem]||0)+(parseFloat(r.litros)||0);});
+  const top=Object.entries(m).sort((a,b)=>b[1]-a[1])[0];
+  if(!top) return '—';
+  const n=top[0];
+  const partes=n.split(' ');
+  return partes.length>3?partes.slice(0,3).join(' ')+'…':n;
+}
+
+function maiorOperacao(dados){
+  const m={};dados.forEach(r=>{if(r.operacao)m[r.operacao]=(m[r.operacao]||0)+1;});
+  const top=Object.entries(m).sort((a,b)=>b[1]-a[1])[0];
+  return top?top[0]:'—';
+}
+
+// ══════════ GRÁFICOS (Canvas) ══════════
+const CHART_COLORS=['#2D6A4F','#40916C','#74C69D','#95D5B2','#E9C46A','#F4A261','#BC6C25','#1B4332'];
+function getCorCSS(varName){
+  return (getComputedStyle(document.documentElement).getPropertyValue(varName)||'#2D6A4F').trim();
+}
+function roundRectPath(ctx,x,y,w,h,r){
+  r=Math.max(0,Math.min(r,h/2,w>0?w/2:r));
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function desenharDonut(canvas,dados){
+  if(!canvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const size=canvas.clientWidth||130;
+  canvas.width=Math.round(size*dpr); canvas.height=Math.round(size*dpr);
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,size,size);
+  const total=dados.reduce((s,d)=>s+d.valor,0);
+  const cx=size/2, cy=size/2, rOut=size/2-3, rIn=rOut*0.6;
+  if(!total){
+    ctx.beginPath();ctx.arc(cx,cy,rOut,0,Math.PI*2);ctx.fillStyle=getCorCSS('--bd');ctx.fill();
+  }else{
+    let ang=-Math.PI/2;
+    dados.forEach(d=>{
+      const next=ang+(d.valor/total)*Math.PI*2;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,rOut,ang,next);
+      ctx.closePath();
+      ctx.fillStyle=d.cor;
+      ctx.fill();
+      ang=next;
+    });
+  }
+  ctx.beginPath();ctx.arc(cx,cy,rIn,0,Math.PI*2);ctx.fillStyle=getCorCSS('--sf');ctx.fill();
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=getCorCSS('--tx');
+  ctx.font='700 14px -apple-system,BlinkMacSystemFont,sans-serif';
+  ctx.fillText(total?total.toLocaleString('pt-BR',{maximumFractionDigits:0}):'0',cx,cy-7);
+  ctx.fillStyle=getCorCSS('--tx3');
+  ctx.font='500 9px -apple-system,BlinkMacSystemFont,sans-serif';
+  ctx.fillText('litros',cx,cy+9);
+}
+function desenharBarras(canvas,dados,cor){
+  if(!canvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const cssW=canvas.clientWidth||280;
+  const rowH=34;
+  const cssH=Math.max(dados.length,1)*rowH;
+  canvas.style.height=cssH+'px';
+  canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssW,cssH);
+  if(!dados.length) return;
+  const max=Math.max(...dados.map(d=>d.valor),1);
+  const tx=getCorCSS('--tx'), tx3=getCorCSS('--tx3'), bd=getCorCSS('--bd');
+  dados.forEach((d,i)=>{
+    const y=i*rowH;
+    const barY=y+18, barH=9;
+    const w=Math.max((d.valor/max)*cssW,4);
+    roundRectPath(ctx,0,barY,cssW,barH,4.5); ctx.fillStyle=bd; ctx.fill();
+    roundRectPath(ctx,0,barY,w,barH,4.5); ctx.fillStyle=cor; ctx.fill();
+    ctx.font='600 11px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    ctx.fillStyle=tx;
+    let label=d.label.length>30?d.label.slice(0,28)+'…':d.label;
+    ctx.fillText(label,0,y+12);
+    ctx.font='500 10px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.textAlign='right';
+    ctx.fillStyle=tx3;
+    ctx.fillText(d.valor.toLocaleString('pt-BR',{maximumFractionDigits:1})+' L',cssW,y+12);
+  });
+}
+function desenharBarrasMedia(canvas,dados,cor){
+  // Igual a desenharBarras mas mostra "média L (Nx)" com contagem
+  if(!canvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const cssW=canvas.clientWidth||280;
+  const rowH=36;
+  const cssH=Math.max(dados.length,1)*rowH;
+  canvas.style.height=cssH+'px';
+  canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssW,cssH);
+  if(!dados.length) return;
+  const max=Math.max(...dados.map(d=>d.valor),1);
+  const tx=getCorCSS('--tx'), tx3=getCorCSS('--tx3'), bd=getCorCSS('--bd');
+  dados.forEach((d,i)=>{
+    const y=i*rowH;
+    const barY=y+19, barH=9;
+    const w=Math.max((d.valor/max)*cssW,4);
+    roundRectPath(ctx,0,barY,cssW,barH,4.5); ctx.fillStyle=bd; ctx.fill();
+    roundRectPath(ctx,0,barY,w,barH,4.5); ctx.fillStyle=cor; ctx.fill();
+    ctx.font='600 11px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    ctx.fillStyle=tx;
+    let label=d.label.length>28?d.label.slice(0,26)+'…':d.label;
+    ctx.fillText(label,0,y+12);
+    ctx.font='500 10px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.textAlign='right';
+    ctx.fillStyle=tx3;
+    const n=d.count||'';
+    ctx.fillText(d.valor.toLocaleString('pt-BR',{maximumFractionDigits:1})+' L'+(n?' ('+n+'x)':''),cssW,y+12);
+  });
+}
+window.addEventListener('resize',()=>{
+  clearTimeout(window._painelResizeT);
+  window._painelResizeT=setTimeout(()=>{
+    if(document.getElementById('tabcontent-analise').classList.contains('active')) renderPainel();
+  },200);
+});
 
 // ══════════ EXPORTAR ══════════
 function atualizarTagsExport(){
   const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
-  const filSafra=(document.getElementById('exp-fil-safra')||{}).value||'';  const filFazenda=(document.getElementById('exp-fil-fazenda')||{}).value||'';  const dataIni=(document.getElementById('exp-data-ini')||{}).value||'';  const dataFim=(document.getElementById('exp-data-fim')||{}).value||'';  const dados=filtrarParaExport(hist,filSafra,filFazenda,dataIni,dataFim);
+  const filFazenda=(document.getElementById('exp-fil-fazenda')||{}).value||'';  const dataIni=(document.getElementById('exp-data-ini')||{}).value||'';  const dataFim=(document.getElementById('exp-data-fim')||{}).value||'';  const dados=filtrarParaExport(hist,filFazenda,dataIni,dataFim);
   const tags=[];
-  if(filSafra) tags.push('Safra: '+filSafra);
   if(filFazenda) tags.push('Fazenda: '+filFazenda);
   if(dataIni) tags.push('De: '+dataIni.split('-').reverse().join('/'));
   if(dataFim) tags.push('Até: '+dataFim.split('-').reverse().join('/'));
@@ -1097,9 +1402,8 @@ function atualizarTagsExport(){
   if(countEl) countEl.textContent=dados.length+' registro'+(dados.length!==1?'s':'')+' serão exportados';
 }
 
-function filtrarParaExport(hist,filSafra,filFazenda,dataIni,dataFim){
+function filtrarParaExport(hist,filFazenda,dataIni,dataFim){
   return hist.filter(r=>{
-    if(filSafra && r.safra!==filSafra) return false;
     if(filFazenda && r.fazenda!==filFazenda) return false;
     if(dataIni||dataFim){const d=r.data||'';if(dataIni&&d&&d<dataIni)return false;if(dataFim&&d&&d>dataFim)return false;}
     return true;
@@ -1108,22 +1412,88 @@ function filtrarParaExport(hist,filSafra,filFazenda,dataIni,dataFim){
 
 function exportarCSVFiltrado(){
   const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
-  const filSafra=(document.getElementById('exp-fil-safra')||{}).value||'';  const filFazenda=(document.getElementById('exp-fil-fazenda')||{}).value||'';  const dataIni=(document.getElementById('exp-data-ini')||{}).value||'';  const dataFim=(document.getElementById('exp-data-fim')||{}).value||'';  const dados=filtrarParaExport(hist,filSafra,filFazenda,dataIni,dataFim);
+  const filFazenda=(document.getElementById('exp-fil-fazenda')||{}).value||'';
+  const dataIni=(document.getElementById('exp-data-ini')||{}).value||'';
+  const dataFim=(document.getElementById('exp-data-fim')||{}).value||'';
+  const dados=filtrarParaExport(hist,filFazenda,dataIni,dataFim).sort((a,b)=>new Date(a.dataHora)-new Date(b.dataHora));
   if(!dados.length){alert('Nenhum registro para exportar.');return;}
+
   const cols=[
-    {id:'col-data',key:'dataFormatada',label:'Data'},{id:'col-safra',key:'safra',label:'Safra'},
-    {id:'col-fazenda',key:'fazenda',label:'Fazenda'},{id:'col-tipo',key:'tipo',label:'Tipo de Bem'},
-    {id:'col-bem',key:'bem',label:'Bem'},{id:'col-operacao',key:'operacao',label:'Operação'},
-    {id:'col-litros',key:'litros',label:'Litros'},{id:'col-hodhor',key:'hodhor',label:'Horímetro/Hodômetro'},
-    {id:'col-responsavel',key:'responsavel',label:'Responsável'},{id:'col-datahora',key:'dataHora',label:'Data/Hora Registro'},
-  ].filter(c=>{const el=document.getElementById(c.id);return el&&el.checked;});
-  const header=cols.map(c=>'"'+c.label+'"');
-  const rows=dados.map(r=>cols.map(c=>'"'+( r[c.key]||''  ).toString().replace(/"/g,'""')+'"'));
-  const csv=[header.join(','),...rows.map(r=>r.join(','))].join('\n');
+    {key:'dataHora',  label:'Data/Hora do Registro', fmt:v=>v?new Date(v).toLocaleString('pt-BR'):''},
+    {key:'fazenda',   label:'Fazenda'},
+    {key:'talhao',    label:'Talhão', fmt:v=>v||NAO_SE_APLICA},
+    {key:'dataFormatada', label:'Data'},
+    {key:'responsavel',   label:'Responsável'},
+    {key:'tipo',      label:'Tipo de Bem'},
+    {key:'bem',       label:'Bem'},
+    {key:'operacao',  label:'Operação'},
+    {key:'hodhor',    label:'Horímetro/Hodômetro'},
+    {key:'litros',    label:'Litros (L)', isNum:true},
+  ];
+
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Título e subtítulo
+  const periodoStr=[
+    filFazenda?'Fazenda: '+filFazenda:'Todas as fazendas',
+    dataIni?'De: '+dataIni.split('-').reverse().join('/'):'',
+    dataFim?'Até: '+dataFim.split('-').reverse().join('/'):'',
+  ].filter(Boolean).join(' · ');
   const dateTag=new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
+
+  // Estilo embutido — funciona no Excel ao abrir HTML
+  const verde='#2D6A4F'; const verdeBg='#D8F3DC'; const header='#1B4332'; const altRow='#F5FBF6';
+  const thStyle=`background:${header};color:#fff;font-weight:bold;padding:7px 10px;border:1px solid #999;font-size:11pt;white-space:nowrap`;
+  const tdBaseStyle=`padding:6px 10px;border:1px solid #ccc;font-size:10.5pt;vertical-align:middle`;
+
+  const thead=`<tr>${cols.map(c=>`<th style="${thStyle}">${esc(c.label)}</th>`).join('')}</tr>`;
+  const tbody=dados.map((r,i)=>{
+    const bg=i%2===0?'#fff':altRow;
+    const cells=cols.map(c=>{
+      const raw=c.fmt?c.fmt(r[c.key]):(r[c.key]||'');
+      const numAttr=c.isNum?' x:num=""':'';
+      return `<td style="${tdBaseStyle};background:${bg}"${numAttr}>${esc(raw)}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  // Linha de totais no rodapé
+  const totalLitros=dados.reduce((s,r)=>s+(parseFloat(r.litros)||0),0);
+  const rodape=`<tr>${cols.map((c,i)=>{
+    if(i===0) return `<td style="${tdBaseStyle};background:#E8F4FB;font-weight:bold">TOTAL — ${dados.length} registros</td>`;
+    if(c.isNum) return `<td style="${tdBaseStyle};background:#E8F4FB;font-weight:bold">${totalLitros.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})}</td>`;
+    return `<td style="${tdBaseStyle};background:#E8F4FB"></td>`;
+  }).join('')}</tr>`;
+
+  const html=`<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="Abastecimentos">
+<Table>
+</Table>
+</Worksheet>
+</Workbook>`;
+  // Fallback para HTML simples que o Excel abre bem:
+  const htmlSimple=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8">
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+<x:Name>Abastecimentos</x:Name>
+<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+</head><body>
+<p style="font-family:Arial;font-size:13pt;font-weight:bold;color:${verde}">Agro Lazarini — Registros de Abastecimento</p>
+<p style="font-family:Arial;font-size:9pt;color:#555">${esc(periodoStr)} &nbsp;·&nbsp; Exportado em ${new Date().toLocaleString('pt-BR')}</p>
+<table border="1" style="font-family:Arial;border-collapse:collapse">
+  <thead>${thead}</thead>
+  <tbody>${tbody}${rodape}</tbody>
+</table>
+</body></html>`;
+
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
-  a.download='abastecimentos_'+(filSafra||'todos')+'_'+dateTag+'.csv';
+  a.href=URL.createObjectURL(new Blob([htmlSimple],{type:'application/vnd.ms-excel;charset=utf-8'}));
+  a.download='abastecimentos_'+(filFazenda||'todos')+'_'+dateTag+'.xls';
   a.click();
 }
 
@@ -1207,22 +1577,11 @@ window.configurarSync = function(){
   }catch(e){ alert('Não consegui ler esse texto como configuração válida. Cole exatamente o objeto { ... } do Firebase, com aspas duplas.'); }
 };
 
-const FIREBASE_CONFIG_PADRAO = {
-  apiKey: "AIzaSyBibuKa7STpnpgCEH9YaeJ2Fnw4-9HHyFs",
-  authDomain: "abastecimento---agro-lazarini.firebaseapp.com",
-  databaseURL: "https://abastecimento---agro-lazarini-default-rtdb.firebaseio.com",
-  projectId: "abastecimento---agro-lazarini",
-  storageBucket: "abastecimento---agro-lazarini.firebasestorage.app",
-  messagingSenderId: "834315143286",
-  appId: "1:834315143286:web:cd0701532a3207a55f7757"
-};
-
 async function initSync(){
   const cfgStr = localStorage.getItem('abast_firebase_config');
-  let cfg;
-  try{ cfg = cfgStr ? JSON.parse(cfgStr) : FIREBASE_CONFIG_PADRAO; }
-  catch(e){ cfg = FIREBASE_CONFIG_PADRAO; }
+  if(!cfgStr){ atualizarStatusSync(); return; }
   try{
+    const cfg = JSON.parse(cfgStr);
     const app = initializeApp(cfg);
     window.SYNC = { ativo:true, db:getDatabase(app) };
     escutarRemoto();
