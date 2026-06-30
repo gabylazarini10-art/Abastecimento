@@ -560,7 +560,10 @@ if(localStorage.getItem('abast_bens_versao')!==BENS_VERSAO){
   localStorage.setItem('abast_bens', JSON.stringify(BENS));
 }
 if(!localStorage.getItem('abast_bens')) localStorage.setItem('abast_bens', JSON.stringify(BENS));
-function salvarBens(){ localStorage.setItem('abast_bens', JSON.stringify(BENS)); }
+function salvarBens(){
+  localStorage.setItem('abast_bens', JSON.stringify(BENS));
+  if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('bens', BENS);
+}
 
 const LISTAS_PADRAO = {
   fazendas: ['São José 1','São José 2','Minuano'],
@@ -575,7 +578,10 @@ if(localStorage.getItem('abast_listas_versao')!==LISTAS_VERSAO){
   localStorage.setItem('abast_listas', JSON.stringify(LISTAS));
 }
 if(!localStorage.getItem('abast_listas')) localStorage.setItem('abast_listas', JSON.stringify(LISTAS));
-function salvarListas(){ localStorage.setItem('abast_listas', JSON.stringify(LISTAS)); }
+function salvarListas(){
+  localStorage.setItem('abast_listas', JSON.stringify(LISTAS));
+  if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('listas', LISTAS);
+}
 
 const TALHOES_PADRAO = {
   'São José 1': [],
@@ -586,7 +592,10 @@ const NAO_SE_APLICA = 'Não se aplica';
 // Operações que exigem seleção de talhão
 const OPERACOES_COM_TALHAO = ['Plantio','Colheita','Aplicação','Adubação','Preparo de Solo','Transporte'];
 let TALHOES = JSON.parse(localStorage.getItem('abast_talhoes')||'null') || JSON.parse(JSON.stringify(TALHOES_PADRAO));
-function salvarTalhoes(){ localStorage.setItem('abast_talhoes', JSON.stringify(TALHOES)); }
+function salvarTalhoes(){
+  localStorage.setItem('abast_talhoes', JSON.stringify(TALHOES));
+  if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('talhoes', TALHOES);
+}
 // Migração: talhão pode ser string (versão antiga) ou {nome, area} (nova). Converte automaticamente.
 (function migrarTalhoes(){
   let mudou=false;
@@ -709,10 +718,25 @@ function selOperacaoOutra(el){
   renderOpcoesTalhao();
 }
 // ══════════ SINCRONIZAÇÃO: atualizar tela ao receber dados remotos ══════════
+// Expor variáveis globais para o módulo Firebase poder atualizá-las
+window.TALHOES = TALHOES;
+window.BENS = BENS;
+window.LISTAS = LISTAS;
+
 window.onSyncUpdate = function(){
+  // Reler variáveis do localStorage caso tenham sido atualizadas pelo Firebase
+  const talhoesRemoto = JSON.parse(localStorage.getItem('abast_talhoes')||'null');
+  if(talhoesRemoto){ Object.assign(TALHOES, talhoesRemoto); window.TALHOES = TALHOES; }
+  const bensRemoto = JSON.parse(localStorage.getItem('abast_bens')||'null');
+  if(bensRemoto){ Object.assign(BENS, bensRemoto); window.BENS = BENS; }
+  const listasRemoto = JSON.parse(localStorage.getItem('abast_listas')||'null');
+  if(listasRemoto){ Object.assign(LISTAS, listasRemoto); window.LISTAS = LISTAS; }
   const ativa = ['historico','novo','analise','config'].find(a=>document.getElementById('tabcontent-'+a).classList.contains('active'));
   if(ativa==='historico') iniciarHistoricoMain();
   if(ativa==='analise') iniciarPainelMain();
+  if(ativa==='config') iniciarConfig();
+  renderOpcoesFazenda();
+  renderOpcoesOperacao();
 };
 
 renderOpcoesFazenda();
@@ -1628,6 +1652,44 @@ window.sincronizarPendentes = async function(){
   atualizarStatusSync();
 };
 
+// ── Sincronizar Config (talhões, bens, listas) ──
+window.salvarConfigRemoto = async function(chave, valor){
+  if(!window.SYNC.ativo) return;
+  try{
+    await set(ref(window.SYNC.db,'config/'+chave), JSON.stringify(valor));
+  }catch(e){ console.warn('Erro ao salvar config remoto', e); }
+};
+
+function escutarConfigRemoto(){
+  onValue(ref(window.SYNC.db,'config'), snap=>{
+    const remoto = snap.val();
+    if(!remoto) return;
+    let atualizado=false;
+    if(remoto['talhoes']){
+      const novo=JSON.parse(remoto['talhoes']);
+      const local=JSON.stringify(window.TALHOES||{});
+      if(JSON.stringify(novo)!==local){
+        window.TALHOES=novo; localStorage.setItem('abast_talhoes',remoto['talhoes']); atualizado=true;
+      }
+    }
+    if(remoto['bens']){
+      const novo=JSON.parse(remoto['bens']);
+      const local=JSON.stringify(window.BENS||{});
+      if(JSON.stringify(novo)!==local){
+        window.BENS=novo; localStorage.setItem('abast_bens',remoto['bens']); atualizado=true;
+      }
+    }
+    if(remoto['listas']){
+      const novo=JSON.parse(remoto['listas']);
+      const local=JSON.stringify(window.LISTAS||{});
+      if(JSON.stringify(novo)!==local){
+        window.LISTAS=novo; localStorage.setItem('abast_listas',remoto['listas']); atualizado=true;
+      }
+    }
+    if(atualizado && typeof window.onSyncUpdate==='function') window.onSyncUpdate();
+  }, err=>{ console.warn('Erro ao ouvir config remoto', err); });
+}
+
 function escutarRemoto(){
   onValue(ref(window.SYNC.db,'abastecimentos'), snap=>{
     const remoto = snap.val()||{};
@@ -1665,7 +1727,12 @@ async function initSync(){
     const app = initializeApp(cfg);
     window.SYNC = { ativo:true, db:getDatabase(app) };
     escutarRemoto();
+    escutarConfigRemoto();
     window.sincronizarPendentes();
+    // Publicar config local para o Firebase na primeira vez
+    if(window.TALHOES) window.salvarConfigRemoto('talhoes', window.TALHOES);
+    if(window.BENS)    window.salvarConfigRemoto('bens', window.BENS);
+    if(window.LISTAS)  window.salvarConfigRemoto('listas', window.LISTAS);
   }catch(e){
     console.warn('Sincronização indisponível (sem internet ou config inválida)', e);
     window.SYNC = {ativo:false};
