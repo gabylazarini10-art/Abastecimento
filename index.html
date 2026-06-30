@@ -439,6 +439,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-novo" style="font-size:12px;padding:8px 14px" onclick="configurarSync()">⚙️ Configurar</button>
         <button class="btn-novo" style="font-size:12px;padding:8px 14px;background:var(--sf);color:var(--verde);border:1.5px solid var(--verde)" onclick="sincronizarPendentes()">↻ Sincronizar agora</button>
+        <button class="btn-novo" style="font-size:12px;padding:8px 14px;background:var(--sf);color:var(--tx2);border:1.5px solid var(--bd)" onclick="forcarSyncConfig()">⬆ Enviar Config</button>
       </div>
       <p style="font-size:10px;color:var(--tx3);margin-top:10px">Configure uma única vez (cole as credenciais do Firebase). Depois disso, todos os aparelhos com esse mesmo código compartilham o histórico automaticamente — mesmo offline, fica guardado e envia quando voltar a internet.</p>
     </div>
@@ -562,7 +563,8 @@ if(localStorage.getItem('abast_bens_versao')!==BENS_VERSAO){
 if(!localStorage.getItem('abast_bens')) localStorage.setItem('abast_bens', JSON.stringify(BENS));
 function salvarBens(){
   localStorage.setItem('abast_bens', JSON.stringify(BENS));
-  if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('bens', BENS);
+  const fn=()=>{ if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('bens', BENS); else setTimeout(fn,1500); };
+  fn();
 }
 
 const LISTAS_PADRAO = {
@@ -580,7 +582,8 @@ if(localStorage.getItem('abast_listas_versao')!==LISTAS_VERSAO){
 if(!localStorage.getItem('abast_listas')) localStorage.setItem('abast_listas', JSON.stringify(LISTAS));
 function salvarListas(){
   localStorage.setItem('abast_listas', JSON.stringify(LISTAS));
-  if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('listas', LISTAS);
+  const fn=()=>{ if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('listas', LISTAS); else setTimeout(fn,1500); };
+  fn();
 }
 
 const TALHOES_PADRAO = {
@@ -594,7 +597,8 @@ const OPERACOES_COM_TALHAO = ['Plantio','Colheita','Aplicação','Adubação','P
 let TALHOES = JSON.parse(localStorage.getItem('abast_talhoes')||'null') || JSON.parse(JSON.stringify(TALHOES_PADRAO));
 function salvarTalhoes(){
   localStorage.setItem('abast_talhoes', JSON.stringify(TALHOES));
-  if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('talhoes', TALHOES);
+  const fn=()=>{ if(typeof window.salvarConfigRemoto==='function') window.salvarConfigRemoto('talhoes', TALHOES); else setTimeout(fn,1500); };
+  fn();
 }
 // Migração: talhão pode ser string (versão antiga) ou {nome, area} (nova). Converte automaticamente.
 (function migrarTalhoes(){
@@ -722,6 +726,14 @@ function selOperacaoOutra(el){
 window.TALHOES = TALHOES;
 window.BENS = BENS;
 window.LISTAS = LISTAS;
+
+window.forcarSyncConfig = function(){
+  if(!window.SYNC || !window.SYNC.ativo){ alert('Firebase não conectado ainda. Aguarde o ícone 🟢.'); return; }
+  window.salvarConfigRemoto('talhoes', TALHOES);
+  window.salvarConfigRemoto('bens', BENS);
+  window.salvarConfigRemoto('listas', LISTAS);
+  alert('Config enviada para o Firebase! Os outros celulares receberão em instantes.');
+};
 
 window.onSyncUpdate = function(){
   // Reler variáveis do localStorage caso tenham sido atualizadas pelo Firebase
@@ -1675,25 +1687,30 @@ function escutarConfigRemoto(){
     const remoto = snap.val();
     if(!remoto) return;
     let atualizado = false;
-    if(remoto.talhoes){
-      const novo = JSON.parse(remoto.talhoes);
-      // Atualiza variável global e localStorage
-      Object.keys(novo).forEach(k=>{ window.TALHOES[k]=novo[k]; });
-      localStorage.setItem('abast_talhoes', JSON.stringify(window.TALHOES));
-      atualizado = true;
-    }
-    if(remoto.bens){
-      const novo = JSON.parse(remoto.bens);
-      Object.keys(novo).forEach(k=>{ window.BENS[k]=novo[k]; });
-      localStorage.setItem('abast_bens', JSON.stringify(window.BENS));
-      atualizado = true;
-    }
-    if(remoto.listas){
-      const novo = JSON.parse(remoto.listas);
-      Object.keys(novo).forEach(k=>{ window.LISTAS[k]=novo[k]; });
-      localStorage.setItem('abast_listas', JSON.stringify(window.LISTAS));
-      atualizado = true;
-    }
+    try{
+      if(remoto.talhoes){
+        const novo = JSON.parse(remoto.talhoes);
+        // Substituição total: limpa e re-popula o objeto
+        Object.keys(window.TALHOES).forEach(k=>delete window.TALHOES[k]);
+        Object.assign(window.TALHOES, novo);
+        localStorage.setItem('abast_talhoes', JSON.stringify(window.TALHOES));
+        atualizado = true;
+      }
+      if(remoto.bens){
+        const novo = JSON.parse(remoto.bens);
+        Object.keys(window.BENS).forEach(k=>delete window.BENS[k]);
+        Object.assign(window.BENS, novo);
+        localStorage.setItem('abast_bens', JSON.stringify(window.BENS));
+        atualizado = true;
+      }
+      if(remoto.listas){
+        const novo = JSON.parse(remoto.listas);
+        Object.keys(window.LISTAS).forEach(k=>delete window.LISTAS[k]);
+        Object.assign(window.LISTAS, novo);
+        localStorage.setItem('abast_listas', JSON.stringify(window.LISTAS));
+        atualizado = true;
+      }
+    }catch(e){ console.warn('Erro ao aplicar config remoto:', e); }
     if(atualizado && typeof window.onSyncUpdate==='function') window.onSyncUpdate();
   }, err=>{ console.warn('Erro ao ouvir config remoto:', err); });
 }
