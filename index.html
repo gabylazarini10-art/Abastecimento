@@ -696,6 +696,7 @@ function selOperacao(el, valor){
   document.getElementById('operacao-outra').style.display='none';
   document.getElementById('operacao-outra').value='';
   form.operacao = valor;
+  renderOpcoesTalhao();
 }
 function selOperacaoOutra(el){
   el.closest('.opts-grid').querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));
@@ -705,6 +706,7 @@ function selOperacaoOutra(el){
   inp.value='';
   inp.focus();
   form.operacao = '';
+  renderOpcoesTalhao();
 }
 // ══════════ SINCRONIZAÇÃO: atualizar tela ao receber dados remotos ══════════
 window.onSyncUpdate = function(){
