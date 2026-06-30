@@ -1608,7 +1608,18 @@ iniciarHistoricoMain();
 <!-- ═══════ SINCRONIZAÇÃO ONLINE (Firebase) ═══════ -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getDatabase, ref, set, onValue } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import { getDatabase, ref, set, onValue, get } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+
+// Config embutida — todos os celulares conectam automaticamente
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBibuKa7STpnpgCEH9YaeJ2Fnw4-9HHyFs",
+  authDomain: "abastecimento---agro-lazarini.firebaseapp.com",
+  databaseURL: "https://abastecimento---agro-lazarini-default-rtdb.firebaseio.com",
+  projectId: "abastecimento---agro-lazarini",
+  storageBucket: "abastecimento---agro-lazarini.firebasestorage.app",
+  messagingSenderId: "834315143286",
+  appId: "1:834315143286:web:cd0701532a3207a55f7757"
+};
 
 window.SYNC = { ativo:false };
 
@@ -1617,9 +1628,9 @@ function atualizarStatusSync(){
   if(!el) return;
   const pend = JSON.parse(localStorage.getItem('abast_pendentes')||'[]').length;
   if(!window.SYNC.ativo){
-    el.innerHTML = '⚪ Sincronização não configurada. Clique em "Configurar" para ativar.';
+    el.innerHTML = '⚪ Conectando ao Firebase...';
   } else if(!navigator.onLine){
-    el.innerHTML = `🟡 Offline${pend>0?` — ${pend} registro(s) aguardando envio`:' — registros novos serão enviados quando voltar a internet'}`;
+    el.innerHTML = `🟡 Offline${pend>0?` — ${pend} registro(s) aguardando envio`:' — registros serão enviados ao reconectar'}`;
   } else {
     el.innerHTML = `🟢 Online e sincronizado${pend>0?` (enviando ${pend} pendente(s)...)`:''}`;
   }
@@ -1634,14 +1645,13 @@ function adicionarPendente(reg){
 
 window.enviarParaFirebase = async function(reg){
   if(!window.SYNC.ativo){ adicionarPendente(reg); atualizarStatusSync(); return; }
-  try{
-    await set(ref(window.SYNC.db,'abastecimentos/'+reg.id), reg);
-  }catch(e){ adicionarPendente(reg); }
+  try{ await set(ref(window.SYNC.db,'abastecimentos/'+reg.id), reg); }
+  catch(e){ adicionarPendente(reg); }
   atualizarStatusSync();
 };
 
 window.sincronizarPendentes = async function(){
-  if(!window.SYNC.ativo){ alert('Configure a sincronização primeiro (botão Configurar).'); return; }
+  if(!window.SYNC.ativo) return;
   let p = JSON.parse(localStorage.getItem('abast_pendentes')||'[]');
   const restantes=[];
   for(const reg of p){
@@ -1652,50 +1662,49 @@ window.sincronizarPendentes = async function(){
   atualizarStatusSync();
 };
 
-// ── Sincronizar Config (talhões, bens, listas) ──
+// Salva uma chave de config no Firebase
 window.salvarConfigRemoto = async function(chave, valor){
   if(!window.SYNC.ativo) return;
-  try{
-    await set(ref(window.SYNC.db,'config/'+chave), JSON.stringify(valor));
-  }catch(e){ console.warn('Erro ao salvar config remoto', e); }
+  try{ await set(ref(window.SYNC.db,'config/'+chave), JSON.stringify(valor)); }
+  catch(e){ console.warn('Erro ao salvar config remoto:', e); }
 };
 
+// Escuta mudanças de config vindas de outros dispositivos
 function escutarConfigRemoto(){
   onValue(ref(window.SYNC.db,'config'), snap=>{
     const remoto = snap.val();
     if(!remoto) return;
-    let atualizado=false;
-    if(remoto['talhoes']){
-      const novo=JSON.parse(remoto['talhoes']);
-      const local=JSON.stringify(window.TALHOES||{});
-      if(JSON.stringify(novo)!==local){
-        window.TALHOES=novo; localStorage.setItem('abast_talhoes',remoto['talhoes']); atualizado=true;
-      }
+    let atualizado = false;
+    if(remoto.talhoes){
+      const novo = JSON.parse(remoto.talhoes);
+      // Atualiza variável global e localStorage
+      Object.keys(novo).forEach(k=>{ window.TALHOES[k]=novo[k]; });
+      localStorage.setItem('abast_talhoes', JSON.stringify(window.TALHOES));
+      atualizado = true;
     }
-    if(remoto['bens']){
-      const novo=JSON.parse(remoto['bens']);
-      const local=JSON.stringify(window.BENS||{});
-      if(JSON.stringify(novo)!==local){
-        window.BENS=novo; localStorage.setItem('abast_bens',remoto['bens']); atualizado=true;
-      }
+    if(remoto.bens){
+      const novo = JSON.parse(remoto.bens);
+      Object.keys(novo).forEach(k=>{ window.BENS[k]=novo[k]; });
+      localStorage.setItem('abast_bens', JSON.stringify(window.BENS));
+      atualizado = true;
     }
-    if(remoto['listas']){
-      const novo=JSON.parse(remoto['listas']);
-      const local=JSON.stringify(window.LISTAS||{});
-      if(JSON.stringify(novo)!==local){
-        window.LISTAS=novo; localStorage.setItem('abast_listas',remoto['listas']); atualizado=true;
-      }
+    if(remoto.listas){
+      const novo = JSON.parse(remoto.listas);
+      Object.keys(novo).forEach(k=>{ window.LISTAS[k]=novo[k]; });
+      localStorage.setItem('abast_listas', JSON.stringify(window.LISTAS));
+      atualizado = true;
     }
     if(atualizado && typeof window.onSyncUpdate==='function') window.onSyncUpdate();
-  }, err=>{ console.warn('Erro ao ouvir config remoto', err); });
+  }, err=>{ console.warn('Erro ao ouvir config remoto:', err); });
 }
 
+// Escuta abastecimentos remotos
 function escutarRemoto(){
   onValue(ref(window.SYNC.db,'abastecimentos'), snap=>{
     const remoto = snap.val()||{};
     let hist = JSON.parse(localStorage.getItem('abast_hist')||'[]');
     const ids = new Set(hist.map(r=>r.id));
-    let mudou=false;
+    let mudou = false;
     Object.values(remoto).forEach(r=>{
       if(r && r.id && !ids.has(r.id)){ hist.push(r); ids.add(r.id); mudou=true; }
     });
@@ -1704,38 +1713,24 @@ function escutarRemoto(){
       if(typeof window.onSyncUpdate==='function') window.onSyncUpdate();
     }
     atualizarStatusSync();
-  }, err=>{ console.warn('Sincronização: erro ao ouvir dados remotos', err); });
+  }, err=>{ console.warn('Erro ao ouvir abastecimentos remotos:', err); });
 }
 
+// Botão Configurar agora só serve para desconectar (config já está embutida)
 window.configurarSync = function(){
-  const atual = localStorage.getItem('abast_firebase_config')||'';
-  const novo = prompt('Cole aqui o objeto firebaseConfig (do Firebase Console). Para desativar, deixe em branco e confirme:', atual);
-  if(novo===null) return;
-  if(novo.trim()===''){ localStorage.removeItem('abast_firebase_config'); location.reload(); return; }
-  try{
-    JSON.parse(novo.trim().replace(/^const\s+firebaseConfig\s*=\s*/,'').replace(/;\s*$/,''));
-    localStorage.setItem('abast_firebase_config', novo.trim().replace(/^const\s+firebaseConfig\s*=\s*/,'').replace(/;\s*$/,''));
-    location.reload();
-  }catch(e){ alert('Não consegui ler esse texto como configuração válida. Cole exatamente o objeto { ... } do Firebase, com aspas duplas.'); }
+  alert('A sincronização já está configurada automaticamente! Todos os celulares conectam sem precisar colar nada.');
 };
 
 async function initSync(){
-  const cfgStr = localStorage.getItem('abast_firebase_config');
-  if(!cfgStr){ atualizarStatusSync(); return; }
   try{
-    const cfg = JSON.parse(cfgStr);
-    const app = initializeApp(cfg);
+    const app = initializeApp(FIREBASE_CONFIG);
     window.SYNC = { ativo:true, db:getDatabase(app) };
     escutarRemoto();
     escutarConfigRemoto();
     window.sincronizarPendentes();
-    // Publicar config local para o Firebase na primeira vez
-    if(window.TALHOES) window.salvarConfigRemoto('talhoes', window.TALHOES);
-    if(window.BENS)    window.salvarConfigRemoto('bens', window.BENS);
-    if(window.LISTAS)  window.salvarConfigRemoto('listas', window.LISTAS);
   }catch(e){
-    console.warn('Sincronização indisponível (sem internet ou config inválida)', e);
-    window.SYNC = {ativo:false};
+    console.warn('Firebase indisponível:', e);
+    window.SYNC = { ativo:false };
   }
   atualizarStatusSync();
 }
