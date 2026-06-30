@@ -451,9 +451,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card">
       <span class="field-label" id="config-lista-titulo">Itens</span>
       <div id="config-lista-bens"></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
+      <div id="config-add-normal" style="display:flex;gap:8px;margin-top:10px">
         <input class="inp" type="text" id="config-novo-bem" placeholder="Novo item" style="flex:1" onkeydown="if(event.key==='Enter')adicionarItemConfig()">
         <button class="btn-novo" style="padding:0 16px;font-size:13px" onclick="adicionarItemConfig()">+ Add</button>
+      </div>
+      <div id="config-add-talhao" style="display:none;margin-top:10px">
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          <input class="inp" type="text" id="config-talhao-nome" placeholder="Nome do talhão (ex: Talhão 5)" style="flex:2">
+          <input class="inp" type="number" id="config-talhao-area" placeholder="Área (ha)" style="flex:1;min-width:80px" min="0" step="0.1">
+        </div>
+        <button class="btn-novo" style="width:100%;font-size:13px" onclick="adicionarItemConfig()">+ Adicionar talhão</button>
       </div>
     </div>
 
@@ -576,8 +583,21 @@ const TALHOES_PADRAO = {
   'Minuano': [],
 };
 const NAO_SE_APLICA = 'Não se aplica';
+// Operações que exigem seleção de talhão
+const OPERACOES_COM_TALHAO = ['Plantio','Colheita','Aplicação','Adubação','Preparo de Solo','Transporte'];
 let TALHOES = JSON.parse(localStorage.getItem('abast_talhoes')||'null') || JSON.parse(JSON.stringify(TALHOES_PADRAO));
 function salvarTalhoes(){ localStorage.setItem('abast_talhoes', JSON.stringify(TALHOES)); }
+// Migração: talhão pode ser string (versão antiga) ou {nome, area} (nova). Converte automaticamente.
+(function migrarTalhoes(){
+  let mudou=false;
+  Object.keys(TALHOES).forEach(faz=>{
+    TALHOES[faz]=(TALHOES[faz]||[]).map(t=>{
+      if(typeof t==='string'){mudou=true; return {nome:t,area:''};}
+      return t;
+    });
+  });
+  if(mudou) salvarTalhoes();
+})();
 function garantirTalhoesFazendas(){
   let mudou=false;
   LISTAS.fazendas.forEach(f=>{ if(!TALHOES[f]){ TALHOES[f]=[]; mudou=true; } });
@@ -626,16 +646,21 @@ function renderOpcoesTalhao(){
   const card = document.getElementById('card-talhao');
   if(!cont) return;
   const fazenda = form.fazenda;
+  const operacao = form.operacao;
   const lista = fazenda ? (TALHOES[fazenda]||[]) : [];
   form.talhao = NAO_SE_APLICA;
-  if(!fazenda || lista.length===0){
+  // Só mostra se a fazenda tem talhões E a operação é uma das que exige talhão
+  const opRequer = OPERACOES_COM_TALHAO.some(op=>op===operacao);
+  if(!fazenda || lista.length===0 || !opRequer){
     if(card) card.style.display='none';
     return;
   }
   if(card) card.style.display='';
-  let html = lista.map(t=>
-    `<label class="opt" onclick="sel(this,'talhao')"><input type="radio" name="talhao" value="${t}"><div class="opt-circle"></div><span class="opt-label">${t}</span></label>`
-  ).join('');
+  let html = lista.map(t=>{
+    const nome = typeof t==='object' ? t.nome : t;
+    const area = typeof t==='object' && t.area ? ` (${t.area} ha)` : '';
+    return `<label class="opt" onclick="sel(this,'talhao')"><input type="radio" name="talhao" value="${nome}"><div class="opt-circle"></div><span class="opt-label">${nome}${area}</span></label>`;
+  }).join('');
   html += `<label class="opt selected" onclick="sel(this,'talhao')"><input type="radio" name="talhao" value="${NAO_SE_APLICA}" checked><div class="opt-circle"></div><span class="opt-label">${NAO_SE_APLICA}</span></label>`;
   cont.innerHTML = html;
 }
@@ -807,36 +832,64 @@ function renderConfigItens(){
   const ehTalhao = chave.startsWith('talhao:');
   const ehBem = !chave.startsWith('lista:') && !ehTalhao;
   document.getElementById('config-lista-titulo').textContent = ehBem ? 'Bens nesta categoria' : ehTalhao ? 'Talhões desta fazenda' : 'Itens';
-  document.getElementById('config-novo-bem').placeholder = ehBem ? 'Nome do novo bem (ex: TRATOR 16)' : ehTalhao ? 'Nome do talhão (ex: Talhão 5)' : 'Novo item';
+  // Alternar inputs
+  document.getElementById('config-add-normal').style.display = ehTalhao ? 'none' : 'flex';
+  document.getElementById('config-add-talhao').style.display = ehTalhao ? '' : 'none';
+  if(!ehTalhao) document.getElementById('config-novo-bem').placeholder = ehBem ? 'Nome do novo bem (ex: TRATOR 16)' : 'Novo item';
   const cont = document.getElementById('config-lista-bens');
   if(lista.length===0){
     cont.innerHTML = '<p style="font-size:12px;color:var(--tx3)">Nenhum item cadastrado nesta lista.</p>';
     return;
   }
-  cont.innerHTML = lista.map((b,i)=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--bd);border-radius:7px;margin-bottom:6px;font-size:13px">
-      <span>${b}</span>
-      <button onclick="removerItemConfig(${i})" style="background:none;border:none;color:#e74c3c;font-size:16px;cursor:pointer;line-height:1">✕</button>
-    </div>`).join('');
+  if(ehTalhao){
+    cont.innerHTML = lista.map((t,i)=>{
+      const nome = typeof t==='object' ? t.nome : t;
+      const area = typeof t==='object' && t.area ? t.area : '';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bd);border-radius:7px;margin-bottom:6px;font-size:13px">
+        <span style="flex:1;font-weight:500">${nome}</span>
+        <span style="font-size:11px;color:var(--tx3);min-width:60px;text-align:right">${area?area+' ha':'sem área'}</span>
+        <button onclick="removerItemConfig(${i})" style="background:none;border:none;color:#e74c3c;font-size:16px;cursor:pointer;line-height:1">✕</button>
+      </div>`;
+    }).join('');
+  }else{
+    cont.innerHTML = lista.map((b,i)=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--bd);border-radius:7px;margin-bottom:6px;font-size:13px">
+        <span>${b}</span>
+        <button onclick="removerItemConfig(${i})" style="background:none;border:none;color:#e74c3c;font-size:16px;cursor:pointer;line-height:1">✕</button>
+      </div>`).join('');
+  }
 }
 function adicionarItemConfig(){
   const chave = document.getElementById('config-tipo').value;
-  const input = document.getElementById('config-novo-bem');
-  const nome = input.value.trim();
-  if(!nome) return;
   const lista = configGetLista(chave);
-  if(lista.includes(nome)){ alert('Esse item já existe nessa lista.'); return; }
-  lista.push(nome);
-  configSalvar(chave);
-  configAposMudar(chave);
-  input.value='';
+  const ehTalhao = chave.startsWith('talhao:');
+  if(ehTalhao){
+    const nome = (document.getElementById('config-talhao-nome').value||'').trim();
+    const areaRaw = (document.getElementById('config-talhao-area').value||'').trim();
+    const area = areaRaw ? parseFloat(areaRaw).toString() : '';
+    if(!nome){alert('Informe o nome do talhão.');return;}
+    if(lista.some(t=>(typeof t==='object'?t.nome:t)===nome)){alert('Esse talhão já existe nesta fazenda.');return;}
+    lista.push({nome, area});
+    configSalvar(chave); configAposMudar(chave);
+    document.getElementById('config-talhao-nome').value='';
+    document.getElementById('config-talhao-area').value='';
+  }else{
+    const input = document.getElementById('config-novo-bem');
+    const nome = input.value.trim();
+    if(!nome) return;
+    if(lista.includes(nome)){alert('Esse item já existe nessa lista.');return;}
+    lista.push(nome);
+    configSalvar(chave); configAposMudar(chave);
+    input.value='';
+  }
   renderConfigItens();
 }
 function removerItemConfig(indice){
   const chave = document.getElementById('config-tipo').value;
   const lista = configGetLista(chave);
-  const nome = lista[indice];
-  if(!confirm(`Remover "${nome}" da lista? (Registros antigos no histórico não serão afetados)`)) return;
+  const item = lista[indice];
+  const nomeExib = typeof item==='object' ? item.nome : item;
+  if(!confirm(`Remover "${nomeExib}" da lista? (Registros antigos no histórico não serão afetados)`)) return;
   lista.splice(indice,1);
   configSalvar(chave);
   configAposMudar(chave);
@@ -885,7 +938,10 @@ function irPara(pg){
     gerarResumo();
   }
   if(pg===4){
-    renderOpcoesTalhao();
+    // Reseta talhão ao entrar na pg4 (nova seleção de operação)
+    form.talhao = NAO_SE_APLICA;
+    const card = document.getElementById('card-talhao');
+    if(card) card.style.display='none';
   }
   if(pg===3){
     form.bem='';
@@ -910,6 +966,8 @@ function sel(el, campo){
   // Avanço automático ao selecionar tipo ou bem
   if(campo==='tipo') setTimeout(()=>irPara(3), 150);
   if(campo==='bem')  setTimeout(()=>irPara(4), 150);
+  // Mostra/esconde talhão conforme operação selecionada
+  if(campo==='operacao') renderOpcoesTalhao();
 }
 
 // ══════════ RESUMO ══════════
@@ -1026,7 +1084,7 @@ function atualizarBensEdicao(bemAtual){
 
 function atualizarTalhoesEdicao(talhaoAtual){
   const fazenda=document.getElementById('edit-fazenda').value;
-  const lista=(TALHOES[fazenda]||[]).concat([NAO_SE_APLICA]);
+  const lista=(TALHOES[fazenda]||[]).map(t=>typeof t==='object'?t.nome:t).concat([NAO_SE_APLICA]);
   document.getElementById('edit-talhao').innerHTML=lista.map(t=>`<option value="${t}"${t===talhaoAtual?' selected':''}>${t}</option>`).join('');
 }
 
@@ -1220,21 +1278,41 @@ function renderPainel(){
       mapa[r.operacao][r.talhao].total+=(parseFloat(r.litros)||0);
       mapa[r.operacao][r.talhao].count++;
     });
+    // Montar mapa de áreas: nomeTalhão → area (ha)
+    const areaMap={};
+    const fzFiltro=document.getElementById('painel-fazenda').value;
+    const fazendasParaLer=fzFiltro?[fzFiltro]:LISTAS.fazendas;
+    fazendasParaLer.forEach(faz=>{
+      (TALHOES[faz]||[]).forEach(t=>{
+        const nome=typeof t==='object'?t.nome:t;
+        const area=typeof t==='object'&&t.area?parseFloat(t.area):null;
+        if(area) areaMap[nome]=area;
+      });
+    });
+    const temArea=tals.some(t=>areaMap[t]);
     const thS='padding:7px 9px;font-size:10px;text-transform:uppercase;font-weight:600;color:var(--tx3);border-bottom:2px solid var(--bd);white-space:nowrap';
     const tdS='padding:7px 9px;font-size:11px;border-bottom:1px solid var(--bd);text-align:center';
-    const thead=`<tr><th style="${thS};text-align:left">Operação</th>${tals.map(t=>`<th style="${thS}">${t}</th>`).join('')}</tr>`;
+    const thead=`<tr><th style="${thS};text-align:left">Operação</th>${tals.map(t=>{
+      const aLabel=areaMap[t]?`<div style="font-size:9px;color:var(--tx3);font-weight:400">${areaMap[t]} ha</div>`:'';
+      return `<th style="${thS}">${t}${aLabel}</th>`;
+    }).join('')}</tr>`;
     const tbody=ops.map(op=>{
       const cells=tals.map(t=>{
         const v=mapa[op]&&mapa[op][t];
         if(!v) return `<td style="${tdS};color:var(--bd)">—</td>`;
         const media=v.total/v.count;
-        return `<td style="${tdS}"><strong>${media.toLocaleString('pt-BR',{maximumFractionDigits:1})}</strong><br><span style="font-size:9px;color:var(--tx3)">${v.count}x</span></td>`;
+        const area=areaMap[t];
+        const lha=area?`<div style="font-size:9px;color:var(--verde);font-weight:700">${(v.total/area).toLocaleString('pt-BR',{maximumFractionDigits:1})} L/ha</div>`:'';
+        return `<td style="${tdS}"><strong>${media.toLocaleString('pt-BR',{maximumFractionDigits:1})} L</strong><div style="font-size:9px;color:var(--tx3)">${v.count}x</div>${lha}</td>`;
       }).join('');
       return `<tr><td style="${tdS};text-align:left;font-weight:500">${op}</td>${cells}</tr>`;
     }).join('');
+    const subtitulo=temArea
+      ? 'Linha bold = média L/abastecimento · <span style="color:var(--verde);font-weight:700">verde</span> = L/ha (total ÷ área)'
+      : 'Média de litros por abastecimento — cadastre a área dos talhões no Config para ver L/ha';
     document.getElementById('painel-lista').innerHTML=`
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">📋 Operação × Talhão — média L/abastecimento</div>
-      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">Cada célula = média de litros · número abaixo = quantidade de abastecimentos</div>
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">📋 Operação × Talhão</div>
+      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">${subtitulo}</div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;min-width:280px">
           <thead>${thead}</thead><tbody>${tbody}</tbody>
