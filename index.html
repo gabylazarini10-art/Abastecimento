@@ -440,6 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <button class="btn-novo" style="font-size:12px;padding:8px 14px" onclick="configurarSync()">⚙️ Configurar</button>
         <button class="btn-novo" style="font-size:12px;padding:8px 14px;background:var(--sf);color:var(--verde);border:1.5px solid var(--verde)" onclick="sincronizarPendentes()">↻ Sincronizar agora</button>
         <button class="btn-novo" style="font-size:12px;padding:8px 14px;background:var(--sf);color:var(--tx2);border:1.5px solid var(--bd)" onclick="forcarSyncConfig()">⬆ Enviar Config</button>
+        <button class="btn-novo" style="font-size:12px;padding:8px 14px;background:#fff0f0;color:#c0392b;border:1.5px solid #e74c3c" onclick="limparHistoricoLocal()">🗑 Limpar histórico local</button>
       </div>
       <p style="font-size:10px;color:var(--tx3);margin-top:10px">Configure uma única vez (cole as credenciais do Firebase). Depois disso, todos os aparelhos com esse mesmo código compartilham o histórico automaticamente — mesmo offline, fica guardado e envia quando voltar a internet.</p>
     </div>
@@ -733,6 +734,14 @@ window.forcarSyncConfig = function(){
   window.salvarConfigRemoto('bens', BENS);
   window.salvarConfigRemoto('listas', LISTAS);
   alert('Config enviada para o Firebase! Os outros celulares receberão em instantes.');
+};
+
+window.limparHistoricoLocal = function(){
+  if(!confirm('Apagar todos os registros de abastecimento DESTE aparelho?\n\nIsso não afeta outros celulares nem o Firebase — só limpa o armazenamento local aqui.')) return;
+  localStorage.removeItem('abast_hist');
+  localStorage.removeItem('abast_pendentes');
+  alert('Histórico local limpo! Se o Firebase estiver conectado (🟢), os registros serão baixados novamente ao recarregar.');
+  location.reload();
 };
 
 window.onSyncUpdate = function(){
