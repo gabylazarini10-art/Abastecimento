@@ -1036,7 +1036,15 @@ function enviar(){
   const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
   hist.unshift(reg);
   localStorage.setItem('abast_hist',JSON.stringify(hist));
-  if(typeof window.enviarParaFirebase==='function') window.enviarParaFirebase(reg);
+  // Tenta enviar ao Firebase com retry caso módulo ainda esteja carregando
+  const tentarEnviar=(tentativas)=>{
+    if(typeof window.enviarParaFirebase==='function'){
+      window.enviarParaFirebase(reg);
+    } else if(tentativas>0){
+      setTimeout(()=>tentarEnviar(tentativas-1), 1000);
+    }
+  };
+  tentarEnviar(5);
   irPara(6);
   paginaAtual=6;
   renderSteps();
@@ -1719,13 +1727,18 @@ function escutarConfigRemoto(){
 function escutarRemoto(){
   onValue(ref(window.SYNC.db,'abastecimentos'), snap=>{
     const remoto = snap.val()||{};
+    const remotos = Object.values(remoto).filter(r=>r&&r.id);
+    if(!remotos.length){ atualizarStatusSync(); return; }
     let hist = JSON.parse(localStorage.getItem('abast_hist')||'[]');
-    const ids = new Set(hist.map(r=>r.id));
+    const localMap = {};
+    hist.forEach(r=>{ if(r.id) localMap[r.id]=true; });
     let mudou = false;
-    Object.values(remoto).forEach(r=>{
-      if(r && r.id && !ids.has(r.id)){ hist.push(r); ids.add(r.id); mudou=true; }
+    remotos.forEach(r=>{
+      if(!localMap[r.id]){ hist.push(r); localMap[r.id]=true; mudou=true; }
     });
     if(mudou){
+      // Ordena por data/hora mais recente primeiro
+      hist.sort((a,b)=>new Date(b.dataHora||0)-new Date(a.dataHora||0));
       localStorage.setItem('abast_hist', JSON.stringify(hist));
       if(typeof window.onSyncUpdate==='function') window.onSyncUpdate();
     }
