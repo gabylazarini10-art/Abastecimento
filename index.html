@@ -168,6 +168,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .sub-tab-btn{flex:1;padding:9px 4px;font-size:12px;font-weight:600;background:none;border:none;cursor:pointer;color:var(--tx3);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;font-family:inherit}
 .sub-tab-btn.active{color:var(--verde);border-bottom-color:var(--verde)}
 
+/* Checkbox multi-seleção talhão */
+.opt-check{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--bd);border-radius:9px;margin-bottom:7px;cursor:pointer;background:var(--sf);transition:all .15s;-webkit-tap-highlight-color:transparent}
+.opt-check.selected{background:var(--verde-bg);border-color:var(--verde)}
+.opt-check-box{width:18px;height:18px;border-radius:5px;border:2px solid var(--bd);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;background:#fff;transition:all .15s}
+.opt-check.selected .opt-check-box{background:var(--verde);border-color:var(--verde);color:#fff}
+
 /* PDF / Impressão */
 @media print {
   body * { visibility: hidden; }
@@ -594,7 +600,7 @@ const TALHOES_PADRAO = {
 };
 const NAO_SE_APLICA = 'Não se aplica';
 // Operações que exigem seleção de talhão
-const OPERACOES_COM_TALHAO = ['Plantio','Colheita','Aplicação','Adubação','Preparo de Solo','Transporte'];
+const OPERACOES_COM_TALHAO = ['Plantio','Colheita','Aplicação','Adubação','Preparo de Solo','Transporte','Manutenção'];
 let TALHOES = JSON.parse(localStorage.getItem('abast_talhoes')||'null') || JSON.parse(JSON.stringify(TALHOES_PADRAO));
 function salvarTalhoes(){
   localStorage.setItem('abast_talhoes', JSON.stringify(TALHOES));
@@ -641,7 +647,7 @@ const HOD_LABEL = {
 })();
 
 // ══════════ ESTADO ══════════
-const form = {fazenda:'',talhao:'',data:'',safra:'',tipo:'',bem:'',operacao:'',hodhor:'',litros:'',responsavel:''};
+const form = {fazenda:'',talhao:[],data:'',safra:'',tipo:'',bem:'',operacao:'',hodhor:'',litros:'',responsavel:''};
 let paginaAtual = 1;
 
 // Data padrão = hoje
@@ -662,21 +668,30 @@ function renderOpcoesTalhao(){
   const fazenda = form.fazenda;
   const operacao = form.operacao;
   const lista = fazenda ? (TALHOES[fazenda]||[]) : [];
-  form.talhao = NAO_SE_APLICA;
-  // Só mostra se a fazenda tem talhões E a operação é uma das que exige talhão
-  const opRequer = OPERACOES_COM_TALHAO.some(op=>op===operacao);
+  form.talhao = [];
+  const opRequer = operacao && operacao !== 'Particular';
   if(!fazenda || lista.length===0 || !opRequer){
     if(card) card.style.display='none';
     return;
   }
   if(card) card.style.display='';
-  let html = lista.map(t=>{
+  cont.innerHTML = lista.map(t=>{
     const nome = typeof t==='object' ? t.nome : t;
     const area = typeof t==='object' && t.area ? ` (${t.area} ha)` : '';
-    return `<label class="opt" onclick="sel(this,'talhao')"><input type="radio" name="talhao" value="${nome}"><div class="opt-circle"></div><span class="opt-label">${nome}${area}</span></label>`;
+    return `<div class="opt-check" onclick="toggleTalhao(this,'${nome}')">
+      <div class="opt-check-box">✓</div>
+      <span style="font-size:13px;font-weight:500">${nome}${area}</span>
+    </div>`;
   }).join('');
-  html += `<label class="opt selected" onclick="sel(this,'talhao')"><input type="radio" name="talhao" value="${NAO_SE_APLICA}" checked><div class="opt-circle"></div><span class="opt-label">${NAO_SE_APLICA}</span></label>`;
-  cont.innerHTML = html;
+}
+
+function toggleTalhao(el, nome){
+  el.classList.toggle('selected');
+  if(el.classList.contains('selected')){
+    if(!form.talhao.includes(nome)) form.talhao.push(nome);
+  } else {
+    form.talhao = form.talhao.filter(t=>t!==nome);
+  }
 }
 function renderOpcoesSafra(){
   const el = document.getElementById('opts-safra');
@@ -830,7 +845,7 @@ function irParaAbaInterno(aba){
 const CONFIG_LABELS = {
   'lista:fazendas':'Fazendas',
   'lista:safras':'Safras',
-  'lista:operacoes':'Operações (sugestões)',
+  'lista:operacoes':'Operações (editar nomes)',
 };
 function configGetLista(chave){
   if(chave.startsWith('lista:')) return LISTAS[chave.split(':')[1]];
@@ -1019,9 +1034,10 @@ function sel(el, campo){
 
 // ══════════ RESUMO ══════════
 function gerarResumo(){
+  const talhaoLabel = Array.isArray(form.talhao) && form.talhao.length>0 ? form.talhao.join(', ') : NAO_SE_APLICA;
   const campos=[
     ['Fazenda',form.fazenda],
-    ['Talhão',form.talhao||NAO_SE_APLICA],
+    ['Talhão',talhaoLabel],
     ['Data',form.data?new Date(form.data+'T12:00:00').toLocaleDateString('pt-BR'):'—'],
     ['Tipo de bem',form.tipo],
     ['Bem',form.bem],
@@ -1062,6 +1078,7 @@ function enviar(){
 // ══════════ NOVO REGISTRO ══════════
 function novoRegistro(){
   Object.keys(form).forEach(k=>form[k]='');
+  form.talhao = [];
   document.getElementById('data').value=new Date().toISOString().split('T')[0];
   form.data=document.getElementById('data').value;
   ['hodhor','litros','responsavel'].forEach(id=>document.getElementById(id).value='');
@@ -1090,7 +1107,8 @@ function renderHistoricoMain(){
     if(filTipo && r.tipo!==filTipo) return false;
     if(dataIni||dataFim){const d=r.data||'';if(dataIni&&d&&d<dataIni)return false;if(dataFim&&d&&d>dataFim)return false;}
     if(busca!=='|'){
-      const txt=[r.bem,r.tipo,r.operacao,r.responsavel,r.fazenda,r.talhao].join(' ').toLowerCase();
+      const tStr = Array.isArray(r.talhao) ? r.talhao.join(' ') : (r.talhao||'');
+      const txt=[r.bem,r.tipo,r.operacao,r.responsavel,r.fazenda,tStr].join(' ').toLowerCase();
       if(!txt.includes(busca)) return false;
     }
     return true;
@@ -1105,11 +1123,16 @@ function renderHistoricoMain(){
     el.innerHTML='<p style="text-align:center;color:var(--tx3);font-size:13px;padding:30px">Nenhum registro. Clique em + para registrar.</p>';
     return;
   }
-  el.innerHTML=dados.slice(0,200).map(r=>`
+        const talhaoStr = Array.isArray(r.talhao) ? r.talhao.join(', ') : (r.talhao||'');
+        const talhaoExib = talhaoStr && talhaoStr!==NAO_SE_APLICA ? ' • '+talhaoStr : (r.safra?' • Safra '+r.safra:'');
+        el.innerHTML=dados.slice(0,200).map(r=>{
+          const ts = Array.isArray(r.talhao) ? r.talhao.join(', ') : (r.talhao||'');
+          const te = ts && ts!==NAO_SE_APLICA ? ' • '+ts : (r.safra?' • Safra '+r.safra:'');
+          return `
     <div class="hist-item">
       <div class="hist-top">⛽ ${r.bem||r.tipo} — ${r.dataFormatada}</div>
       <div class="hist-det">
-        📍 ${r.fazenda}${r.talhao&&r.talhao!==NAO_SE_APLICA?' • '+r.talhao:(r.safra?' • Safra '+r.safra:'')} &nbsp;|&nbsp; ${r.operacao}<br>
+        📍 ${r.fazenda}${te} &nbsp;|&nbsp; ${r.operacao}<br>
         🔢 ${r.litros}L &nbsp;|&nbsp; ${HOD_LABEL[r.tipo]||'Horímetro'}: ${r.hodhor||'—'}<br>
         👤 ${r.responsavel}
       </div>
@@ -1117,7 +1140,7 @@ function renderHistoricoMain(){
         <button class="btn-edit" onclick="abrirEdicao('${r.id}')">✏ Editar</button>
         <button class="btn-del" onclick="excluirRegistro('${r.id}')">🗑 Excluir</button>
       </div>
-    </div>`).join('');
+    </div>`}).join('');
 }
 
 // ══════════ EDIÇÃO ══════════
@@ -1321,29 +1344,48 @@ function renderPainel(){
     <canvas id="chart-bem-media" style="width:100%;display:block"></canvas>`;
   desenharBarrasMedia(document.getElementById('chart-bem-media'), bemMediaData, getCorCSS('--verde'));
 
-  // ── BLOCO 5: Tabela cruzada Operação × Talhão ──
-  const dadosTalhao=dados.filter(r=>r.talhao&&r.talhao!==NAO_SE_APLICA&&r.operacao);
+  // ── BLOCO 5: Tabela cruzada Operação × Talhão (suporta múltiplos talhões por abastecimento) ──
+  // Helper: normaliza talhao para array
+  const getTalhoes = r => Array.isArray(r.talhao) ? r.talhao.filter(t=>t&&t!==NAO_SE_APLICA) : (r.talhao&&r.talhao!==NAO_SE_APLICA ? [r.talhao] : []);
+  const dadosTalhao = dados.filter(r=>getTalhoes(r).length>0 && r.operacao);
+
+  // Mapa de áreas
+  const areaMap={};
+  const fzFiltro=document.getElementById('painel-fazenda').value;
+  const fazendasParaLer=fzFiltro?[fzFiltro]:LISTAS.fazendas;
+  fazendasParaLer.forEach(faz=>{
+    (TALHOES[faz]||[]).forEach(t=>{
+      const nome=typeof t==='object'?t.nome:t;
+      const area=typeof t==='object'&&t.area?parseFloat(t.area):null;
+      if(area) areaMap[nome]=area;
+    });
+  });
+
   if(dadosTalhao.length){
     const ops=[...new Set(dadosTalhao.map(r=>r.operacao))].sort();
-    const tals=[...new Set(dadosTalhao.map(r=>r.talhao))].sort();
+    // Para cada abastecimento com múltiplos talhões: distribuir litros proporcionalmente pela área (ou igualmente se sem área)
+    // Na tabela, cada combinação op×talhão recebe os litros daquele abastecimento ÷ soma das áreas dos talhões × área do talhão
+    // Se sem área: divide igualmente
     const mapa={};
     dadosTalhao.forEach(r=>{
-      if(!mapa[r.operacao])mapa[r.operacao]={};
-      if(!mapa[r.operacao][r.talhao])mapa[r.operacao][r.talhao]={total:0,count:0};
-      mapa[r.operacao][r.talhao].total+=(parseFloat(r.litros)||0);
-      mapa[r.operacao][r.talhao].count++;
-    });
-    // Montar mapa de áreas: nomeTalhão → area (ha)
-    const areaMap={};
-    const fzFiltro=document.getElementById('painel-fazenda').value;
-    const fazendasParaLer=fzFiltro?[fzFiltro]:LISTAS.fazendas;
-    fazendasParaLer.forEach(faz=>{
-      (TALHOES[faz]||[]).forEach(t=>{
-        const nome=typeof t==='object'?t.nome:t;
-        const area=typeof t==='object'&&t.area?parseFloat(t.area):null;
-        if(area) areaMap[nome]=area;
+      const tals = getTalhoes(r);
+      const litros = parseFloat(r.litros)||0;
+      const op = r.operacao;
+      // Calcular área total do grupo de talhões
+      const areas = tals.map(t=>areaMap[t]||null);
+      const temTodosArea = areas.every(a=>a!==null);
+      const areaTotal = temTodosArea ? areas.reduce((s,a)=>s+a,0) : null;
+      tals.forEach((t,i)=>{
+        // L atribuídos a este talhão
+        const litrosTal = areaTotal ? litros*(areas[i]/areaTotal) : litros/tals.length;
+        if(!mapa[op]) mapa[op]={};
+        if(!mapa[op][t]) mapa[op][t]={total:0,totalArea:0,count:0,temArea:false};
+        mapa[op][t].total += litrosTal;
+        mapa[op][t].count++;
+        if(areaMap[t]){ mapa[op][t].totalArea += areaMap[t]; mapa[op][t].temArea=true; }
       });
     });
+    const tals=[...new Set(dadosTalhao.flatMap(r=>getTalhoes(r)))].sort();
     const temArea=tals.some(t=>areaMap[t]);
     const thS='padding:7px 9px;font-size:10px;text-transform:uppercase;font-weight:600;color:var(--tx3);border-bottom:2px solid var(--bd);white-space:nowrap';
     const tdS='padding:7px 9px;font-size:11px;border-bottom:1px solid var(--bd);text-align:center';
@@ -1356,15 +1398,14 @@ function renderPainel(){
         const v=mapa[op]&&mapa[op][t];
         if(!v) return `<td style="${tdS};color:var(--bd)">—</td>`;
         const media=v.total/v.count;
-        const area=areaMap[t];
-        const lha=area?`<div style="font-size:9px;color:var(--verde);font-weight:700">${(v.total/area).toLocaleString('pt-BR',{maximumFractionDigits:1})} L/ha</div>`:'';
+        const lha=areaMap[t]?`<div style="font-size:9px;color:var(--verde);font-weight:700">${(v.total/areaMap[t]).toLocaleString('pt-BR',{maximumFractionDigits:1})} L/ha</div>`:'';
         return `<td style="${tdS}"><strong>${media.toLocaleString('pt-BR',{maximumFractionDigits:1})} L</strong><div style="font-size:9px;color:var(--tx3)">${v.count}x</div>${lha}</td>`;
       }).join('');
       return `<tr><td style="${tdS};text-align:left;font-weight:500">${op}</td>${cells}</tr>`;
     }).join('');
     const subtitulo=temArea
-      ? 'Linha bold = média L/abastecimento · <span style="color:var(--verde);font-weight:700">verde</span> = L/ha (total ÷ área)'
-      : 'Média de litros por abastecimento — cadastre a área dos talhões no Config para ver L/ha';
+      ? 'Bold = L atribuídos ao talhão · <span style="color:var(--verde);font-weight:700">verde</span> = L/ha — múltiplos talhões: litros divididos proporcionalmente pela área'
+      : 'Litros por talhão — cadastre área no Config para ver L/ha';
     document.getElementById('painel-lista').innerHTML=`
       <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">📋 Operação × Talhão</div>
       <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">${subtitulo}</div>
@@ -1554,7 +1595,7 @@ function exportarCSVFiltrado(){
   const cols=[
     {key:'dataHora',  label:'Data/Hora do Registro', fmt:v=>v?new Date(v).toLocaleString('pt-BR'):''},
     {key:'fazenda',   label:'Fazenda'},
-    {key:'talhao',    label:'Talhão', fmt:v=>v||NAO_SE_APLICA},
+    {key:'talhao', label:'Talhão', fmt:v=>Array.isArray(v)?v.join(', '):(v||NAO_SE_APLICA)},
     {key:'dataFormatada', label:'Data'},
     {key:'responsavel',   label:'Responsável'},
     {key:'tipo',      label:'Tipo de Bem'},
