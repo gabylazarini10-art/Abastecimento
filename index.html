@@ -304,7 +304,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card">
       <span class="field-label">Operação <span class="req">*</span></span>
       <div class="opts-grid" id="opts-operacao"></div>
-      <input class="inp" type="text" id="operacao-outra" placeholder="Digite a operação" style="display:none;margin-top:8px" oninput="form.operacao=this.value">
     </div>
     <div class="card" id="card-talhao" style="display:none">
       <span class="field-label">Talhão <span style="color:var(--tx3);font-weight:400;font-size:10.5px">(opcional)</span></span>
@@ -716,25 +715,12 @@ function renderOpcoesOperacao(){
   let html = LISTAS.operacoes.map(o=>
     `<label class="opt" onclick='selOperacao(this,${JSON.stringify(o)})'><input type="radio" name="operacao"><div class="opt-circle"></div><span class="opt-label">${o}</span></label>`
   ).join('');
-  html += `<label class="opt" onclick="selOperacaoOutra(this)"><input type="radio" name="operacao"><div class="opt-circle"></div><span class="opt-label">Outra</span></label>`;
   document.getElementById('opts-operacao').innerHTML = html;
 }
 function selOperacao(el, valor){
   el.closest('.opts-grid').querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));
   el.classList.add('selected');
-  document.getElementById('operacao-outra').style.display='none';
-  document.getElementById('operacao-outra').value='';
   form.operacao = valor;
-  renderOpcoesTalhao();
-}
-function selOperacaoOutra(el){
-  el.closest('.opts-grid').querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));
-  el.classList.add('selected');
-  const inp = document.getElementById('operacao-outra');
-  inp.style.display='block';
-  inp.value='';
-  inp.focus();
-  form.operacao = '';
   renderOpcoesTalhao();
 }
 // ══════════ SINCRONIZAÇÃO: atualizar tela ao receber dados remotos ══════════
@@ -1082,8 +1068,6 @@ function novoRegistro(){
   document.getElementById('data').value=new Date().toISOString().split('T')[0];
   form.data=document.getElementById('data').value;
   ['hodhor','litros','responsavel'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('operacao-outra').value='';
-  document.getElementById('operacao-outra').style.display='none';
   document.querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));
   const cardT=document.getElementById('card-talhao');
   if(cardT) cardT.style.display='none';
