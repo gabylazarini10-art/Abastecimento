@@ -1107,9 +1107,7 @@ function renderHistoricoMain(){
     el.innerHTML='<p style="text-align:center;color:var(--tx3);font-size:13px;padding:30px">Nenhum registro. Clique em + para registrar.</p>';
     return;
   }
-        const talhaoStr = Array.isArray(r.talhao) ? r.talhao.join(', ') : (r.talhao||'');
-        const talhaoExib = talhaoStr && talhaoStr!==NAO_SE_APLICA ? ' • '+talhaoStr : (r.safra?' • Safra '+r.safra:'');
-        el.innerHTML=dados.slice(0,200).map(r=>{
+  el.innerHTML=dados.slice(0,200).map(r=>{
           const ts = Array.isArray(r.talhao) ? r.talhao.join(', ') : (r.talhao||'');
           const te = ts && ts!==NAO_SE_APLICA ? ' • '+ts : (r.safra?' • Safra '+r.safra:'');
           return `
