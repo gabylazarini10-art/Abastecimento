@@ -297,7 +297,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="CAMINHONETE"><div class="opt-circle"></div><div class="opt-icon">🚙</div><span class="opt-label">CAMINHONETE</span></label>
         <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="CAMINHÃO"><div class="opt-circle"></div><div class="opt-icon">🚛</div><span class="opt-label">CAMINHÃO</span></label>
         <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="COMBOIO"><div class="opt-circle"></div><div class="opt-icon">⛽</div><span class="opt-label">COMBOIO</span></label>
-        <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="MOTOCICLETA"><div class="opt-circle"></div><div class="opt-icon">🏍️</div><span class="opt-label">MOTOCICLETA</span></label>
         <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="CARRETINHA DE DIESEL"><div class="opt-circle"></div><div class="opt-icon">🛢️</div><span class="opt-label">CARRETINHA</span></label>
         <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="TERCEIROS"><div class="opt-circle"></div><div class="opt-icon">🤝</div><span class="opt-label">TERCEIROS</span></label>
       </div>
@@ -1380,13 +1379,20 @@ function renderPainel(){
     const pares=[];
     for(let i=1;i<leituras.length;i++){
       const diff=leituras[i].hodhor-leituras[i-1].hodhor;
-      if(diff>0) pares.push({diff, litros:leituras[i-1].litros});
+      if(diff<=0) continue;
+      const usaKmPar = USA_HODOMETRO.has(tipo);
+      const val = usaKmPar ? diff/leituras[i-1].litros : leituras[i-1].litros/diff;
+      // Filtrar valores fisicamente impossíveis
+      if(usaKmPar && val>30) return; // >30 km/L impossível para esses veículos
+      if(!usaKmPar && val>50) return; // >50 L/h impossível para qualquer máquina agrícola
+      if(val>0) pares.push({diff, litros:leituras[i-1].litros, val});
     }
     if(pares.length===0) return;
     const usaKm = USA_HODOMETRO.has(tipo);
     const totalDiff = pares.reduce((s,p)=>s+p.diff,0);
     const totalLitros = pares.reduce((s,p)=>s+p.litros,0);
     const valor = usaKm ? totalDiff/totalLitros : totalLitros/totalDiff;
+    if(valor<=0||!isFinite(valor)) return;
     bemEficiencia.push({label:bem,valor,pares:pares.length,unidade:usaKm?'km/L':'L/h'});
   });
   bemEficiencia.sort((a,b)=>{
@@ -1478,6 +1484,18 @@ function renderPainel(){
       }).join('');
       return `<tr><td style="${tdS};text-align:left;font-weight:500">${op}</td>${cells}</tr>`;
     }).join('');
+    // Linha de totais por talhão
+    const tfS='padding:7px 9px;font-size:11px;border-top:2px solid var(--bd);font-weight:700;text-align:center;background:var(--verde-bg)';
+    const tfoot=`<tr>
+      <td style="${tfS};text-align:left;color:var(--verde-tx)">TOTAL GERAL</td>
+      ${tals.map(t=>{
+        let totalL=0, totalCount=0;
+        ops.forEach(op=>{ const v=mapa[op]&&mapa[op][t]; if(v){totalL+=v.total;totalCount+=v.count;} });
+        if(totalCount===0) return `<td style="${tfS};color:var(--bd)">—</td>`;
+        const lha=areaMap[t]?`<div style="font-size:9px;color:var(--verde);font-weight:700">${(totalL/areaMap[t]).toLocaleString('pt-BR',{maximumFractionDigits:1})} L/ha total</div>`:'';
+        return `<td style="${tfS}"><span style="color:var(--verde)">${totalL.toLocaleString('pt-BR',{maximumFractionDigits:1})} L</span>${lha}</td>`;
+      }).join('')}
+    </tr>`;
     const subtitulo=temArea
       ? 'Bold = L atribuídos ao talhão · <span style="color:var(--verde);font-weight:700">verde</span> = L/ha — múltiplos talhões: litros divididos proporcionalmente pela área'
       : 'Litros por talhão — cadastre área no Config para ver L/ha';
@@ -1486,7 +1504,7 @@ function renderPainel(){
       <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">${subtitulo}</div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;min-width:280px">
-          <thead>${thead}</thead><tbody>${tbody}</tbody>
+          <thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot>
         </table>
       </div>`;
   }else{
@@ -1497,9 +1515,97 @@ function renderPainel(){
 }
 
 function exportarPDF(){
-  // Força re-render para garantir canvases atualizados, depois imprime
   renderPainel();
-  setTimeout(()=>window.print(), 200);
+  // Coleta dados atuais
+  const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
+  const fz=document.getElementById('painel-fazenda').value;
+  const dataIni=document.getElementById('painel-data-ini').value;
+  const dataFim=document.getElementById('painel-data-fim').value;
+  const dados=hist.filter(r=>{
+    if(fz&&r.fazenda!==fz)return false;
+    if(dataIni||dataFim){const d=r.data||'';if(dataIni&&d&&d<dataIni)return false;if(dataFim&&d&&d>dataFim)return false;}
+    return true;
+  });
+  const totalL=dados.reduce((s,r)=>s+(parseFloat(r.litros)||0),0);
+  const fmtN=(n,dec=1)=>n.toLocaleString('pt-BR',{maximumFractionDigits:dec});
+  const periodo=[
+    fz||'Todas as fazendas',
+    dataIni?'De: '+dataIni.split('-').reverse().join('/'):'',
+    dataFim?'Até: '+dataFim.split('-').reverse().join('/'):'',
+    'Gerado em '+new Date().toLocaleString('pt-BR'),
+  ].filter(Boolean).join(' · ');
+
+  // Tabela por operação
+  const opG={};
+  dados.forEach(r=>{if(r.operacao){if(!opG[r.operacao])opG[r.operacao]={t:0,c:0};opG[r.operacao].t+=(parseFloat(r.litros)||0);opG[r.operacao].c++;}});
+  const opRows=Object.entries(opG).sort((a,b)=>b[1].t-a[1].t)
+    .map(([op,v])=>`<tr><td>${op}</td><td>${v.c}</td><td>${fmtN(v.t)} L</td><td>${fmtN(v.t/v.c)} L</td></tr>`).join('');
+
+  // Tabela eficiência por bem
+  const bemHM={};
+  dados.filter(r=>r.bem&&r.hodhor).forEach(r=>{
+    if(!bemHM[r.bem])bemHM[r.bem]={tipo:r.tipo,leituras:[]};
+    bemHM[r.bem].leituras.push({hodhor:parseFloat(r.hodhor),litros:parseFloat(r.litros)||0});
+  });
+  const efRows=Object.entries(bemHM).map(([bem,{tipo,leituras}])=>{
+    leituras.sort((a,b)=>a.hodhor-b.hodhor);
+    const pares=[];
+    for(let i=1;i<leituras.length;i++){
+      const diff=leituras[i].hodhor-leituras[i-1].hodhor;
+      if(diff<=0)continue;
+      const usaKmPar=USA_HODOMETRO.has(tipo);
+      const val=usaKmPar?diff/leituras[i-1].litros:leituras[i-1].litros/diff;
+      if(usaKmPar&&val>30)continue;
+      if(!usaKmPar&&val>50)continue;
+      if(val>0)pares.push({diff,litros:leituras[i-1].litros});
+    }
+    if(!pares.length)return null;
+    const usaKm=USA_HODOMETRO.has(tipo);
+    const tD=pares.reduce((s,p)=>s+p.diff,0);
+    const tL=pares.reduce((s,p)=>s+p.litros,0);
+    const val=usaKm?tD/tL:tL/tD;
+    if(!isFinite(val)||val<=0)return null;
+    return `<tr><td>${bem}</td><td>${tipo}</td><td>${fmtN(val,2)} ${usaKm?'km/L':'L/h'}</td><td>${pares.length}</td></tr>`;
+  }).filter(Boolean).join('');
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+  <title>Análise de Abastecimento — Agro Lazarini</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:12pt;margin:20mm;color:#1C1C1C}
+    h1{font-size:18pt;color:#2D6A4F;margin:0 0 4px}
+    .sub{font-size:9pt;color:#777;margin-bottom:20px}
+    h2{font-size:13pt;color:#1B4332;border-bottom:2px solid #2D6A4F;padding-bottom:4px;margin:20px 0 10px}
+    .kpis{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+    .kpi{border:1px solid #ccc;border-radius:8px;padding:10px 18px;text-align:center;min-width:120px}
+    .kpi-val{font-size:22pt;font-weight:bold;color:#2D6A4F}
+    .kpi-lbl{font-size:8pt;color:#777;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    th{background:#1B4332;color:#fff;padding:8px 10px;font-size:10pt;text-align:left}
+    td{padding:7px 10px;border-bottom:1px solid #eee;font-size:10pt}
+    tr:nth-child(even) td{background:#f9f9f9}
+    tfoot td{background:#D8F3DC;font-weight:bold;border-top:2px solid #2D6A4F}
+    @page{margin:15mm;size:A4}
+    @media print{body{margin:0}}
+  </style></head><body>
+  <h1>⛽ Análise de Abastecimento</h1>
+  <div class="sub">${periodo}</div>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-val">${fmtN(totalL)} L</div><div class="kpi-lbl">Total de Litros</div></div>
+    <div class="kpi"><div class="kpi-val">${dados.length}</div><div class="kpi-lbl">Abastecimentos</div></div>
+    <div class="kpi"><div class="kpi-val">${dados.length?fmtN(totalL/dados.length):0} L</div><div class="kpi-lbl">Média/abastecimento</div></div>
+  </div>
+  <h2>📊 Consumo por Operação</h2>
+  <table><thead><tr><th>Operação</th><th>Abastecimentos</th><th>Total Litros</th><th>Média/abastec.</th></tr></thead>
+  <tbody>${opRows}</tbody></table>
+  ${efRows?`<h2>⚡ Eficiência por Bem</h2>
+  <table><thead><tr><th>Bem</th><th>Tipo</th><th>Eficiência</th><th>Pares calculados</th></tr></thead>
+  <tbody>${efRows}</tbody></table>`:''}
+  <script>window.onload=()=>{ window.print(); }<\/script>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  if(win){ win.document.write(html); win.document.close(); }
+  else alert('Permita pop-ups para gerar o PDF.');
 }
 
 function maiorConsumidorBem(dados){
