@@ -178,11 +178,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 @media print {
   body * { visibility: hidden; }
   #print-area, #print-area * { visibility: visible; }
-  #print-area { position: absolute; top: 0; left: 0; width: 100%; padding: 16px; }
-  .painel-stats { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
-  .card { page-break-inside: avoid; }
+  #print-area {
+    position: absolute; top: 0; left: 0;
+    width: 100%; padding: 20px;
+    font-size: 13pt;
+  }
+  .painel-stats {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .card {
+    page-break-inside: avoid;
+    border: 1px solid #ccc !important;
+    padding: 14px !important;
+    margin-bottom: 16px !important;
+    border-radius: 8px !important;
+  }
+  canvas { max-width: 100% !important; }
   .print-header { display: block !important; }
-  @page { margin: 10mm; }
+  /* Barras de progresso ficam visíveis */
+  [style*="border-radius:99px"] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { margin: 15mm; size: A4 portrait; }
 }
 .print-header { display: none; }
 </style>
@@ -281,6 +299,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="COMBOIO"><div class="opt-circle"></div><div class="opt-icon">⛽</div><span class="opt-label">COMBOIO</span></label>
         <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="MOTOCICLETA"><div class="opt-circle"></div><div class="opt-icon">🏍️</div><span class="opt-label">MOTOCICLETA</span></label>
         <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="CARRETINHA DE DIESEL"><div class="opt-circle"></div><div class="opt-icon">🛢️</div><span class="opt-label">CARRETINHA</span></label>
+        <label class="opt" onclick="sel(this,'tipo')"><input type="radio" name="tipo" value="TERCEIROS"><div class="opt-circle"></div><div class="opt-icon">🤝</div><span class="opt-label">TERCEIROS</span></label>
       </div>
     </div>
     <div class="btn-wrap">
@@ -293,9 +312,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card">
       <span class="field-label" id="lbl-bem">Qual bem? <span class="req">*</span></span>
       <div class="options" id="opts-bem"></div>
+      <input class="inp" type="text" id="bem-terceiros" placeholder="Ex: TRATOR CONTRATADO JOÃO SILVA" style="display:none;margin-top:10px" oninput="form.bem=this.value">
     </div>
     <div class="btn-wrap">
       <button class="btn btn-back" onclick="irPara(2)">← Voltar</button>
+      <button class="btn btn-next" id="btn-terceiros-next" onclick="irPara(4)" style="display:none">Próximo →</button>
     </div>
   </div>
 
@@ -310,7 +331,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="options" id="opts-talhao"></div>
     </div>
     <div class="card">
-      <span class="field-label" id="lbl-hodhor">Horímetro / Hodômetro</span>
+      <span class="field-label" id="lbl-hodhor">Horímetro / Hodômetro <span class="req" id="req-hodhor">*</span></span>
       <input class="inp" type="number" id="hodhor" placeholder="Leitura atual">
       <span class="field-label" style="margin-top:14px">Litros abastecidos <span class="req">*</span></span>
       <input class="inp" type="number" id="litros" placeholder="0.0" step="0.1" min="0">
@@ -627,8 +648,12 @@ garantirTalhoesFazendas();
 const HOD_LABEL = {
   'CAMINHONETE':'Hodômetro (km)','CAMINHÃO':'Hodômetro (km)','MOTOCICLETA':'Hodômetro (km)',
   'TRATOR':'Horímetro (h)','COLHEITADEIRA':'Horímetro (h)','PULVERIZADOR':'Horímetro (h)',
-  'COMBOIO':'Horímetro (h)','CARRETINHA DE DIESEL':'—',
+  'COMBOIO':'Horímetro (h)','CARRETINHA DE DIESEL':'—','TERCEIROS':'Horímetro/Hodômetro',
 };
+// Tipos que NÃO precisam de horímetro obrigatório
+const SEM_HODHOR = new Set(['CARRETINHA DE DIESEL','COMBOIO','TERCEIROS']);
+// Tipos com hodômetro (km) para cálculo km/L
+const USA_HODOMETRO = new Set(['CAMINHONETE','CAMINHÃO','MOTOCICLETA']);
 
 // ══════════ MIGRAÇÃO DE NOMES DE FAZENDA (registros antigos) ══════════
 (function migrarFazendas(){
@@ -976,27 +1001,57 @@ function irPara(pg){
   if(pg===2&&!form.data){alert('Informe a data!');return;}
   if(pg===2&&!form.responsavel){alert('Informe o responsável!');return;}
   if(pg===3&&!form.tipo){alert('Selecione o tipo de bem!');return;}
-  if(pg===4&&!form.bem){alert('Selecione o bem!');return;}
+  if(pg===4){
+    if(form.tipo==='TERCEIROS'){
+      const bemT=document.getElementById('bem-terceiros').value.trim();
+      if(!bemT){alert('Descreva o bem terceirizado!');return;}
+      form.bem=bemT;
+    } else {
+      if(!form.bem){alert('Selecione o bem!');return;}
+    }
+  }
   if(pg===5){
     if(!form.operacao){alert('Selecione a operação!');return;}
     const litrosVal=document.getElementById('litros').value.trim();
     if(!litrosVal||parseFloat(litrosVal)<=0){alert('Informe os litros!');return;}
-    form.hodhor=document.getElementById('hodhor').value;
+    const hodhorVal=document.getElementById('hodhor').value.trim();
+    if(!SEM_HODHOR.has(form.tipo)&&!hodhorVal){
+      alert('Informe o '+(HOD_LABEL[form.tipo]||'Horímetro')+'!');return;
+    }
+    form.hodhor=hodhorVal;
     form.litros=litrosVal;
     gerarResumo();
   }
   if(pg===4){
-    // Reseta talhão ao entrar na pg4 (nova seleção de operação)
-    form.talhao = NAO_SE_APLICA;
+    form.talhao = [];
     const card = document.getElementById('card-talhao');
     if(card) card.style.display='none';
   }
   if(pg===3){
     form.bem='';
-    const lista = BENS[form.tipo]||[];
-    document.getElementById('lbl-bem').innerHTML=`Qual ${form.tipo.toLowerCase()} deseja abastecer? <span class="req">*</span>`;
-    document.getElementById('lbl-hodhor').textContent = HOD_LABEL[form.tipo]||'Horímetro / Hodômetro';
-    document.getElementById('opts-bem').innerHTML=lista.map(b=>`<label class="opt" onclick="sel(this,'bem')"><input type="radio" name="bem" value="${b}"><div class="opt-circle"></div><span class="opt-label" style="font-size:12px">${b}</span></label>`).join('');
+    const ehTerceiros = form.tipo==='TERCEIROS';
+    const lista = ehTerceiros ? [] : (BENS[form.tipo]||[]);
+    const labelTipo = ehTerceiros ? 'terceirizado' : form.tipo.toLowerCase();
+    document.getElementById('lbl-bem').innerHTML=`Qual ${labelTipo} deseja abastecer? <span class="req">*</span>`;
+    // Atualizar label e obrigatoriedade do horímetro
+    const hodLabel = HOD_LABEL[form.tipo]||'Horímetro';
+    document.getElementById('lbl-hodhor').textContent = hodLabel + (SEM_HODHOR.has(form.tipo)?'':' *');
+    const reqEl = document.getElementById('req-hodhor');
+    if(reqEl) reqEl.style.display = SEM_HODHOR.has(form.tipo)?'none':'inline';
+    // Mostrar/esconder campo texto terceiros
+    const bemTerceiros = document.getElementById('bem-terceiros');
+    const btnTerceiros = document.getElementById('btn-terceiros-next');
+    const optsBem = document.getElementById('opts-bem');
+    if(ehTerceiros){
+      optsBem.innerHTML='<p style="font-size:12px;color:var(--tx3);margin-bottom:8px">Digite o nome do bem terceirizado:</p>';
+      bemTerceiros.style.display='block';
+      bemTerceiros.value='';
+      if(btnTerceiros) btnTerceiros.style.display='flex';
+    }else{
+      bemTerceiros.style.display='none';
+      if(btnTerceiros) btnTerceiros.style.display='none';
+      optsBem.innerHTML=lista.map(b=>`<label class="opt" onclick="sel(this,'bem')"><input type="radio" name="bem" value="${b}"><div class="opt-circle"></div><span class="opt-label" style="font-size:12px">${b}</span></label>`).join('');
+    }
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('pg'+pg).classList.add('active');
@@ -1068,6 +1123,10 @@ function novoRegistro(){
   document.getElementById('data').value=new Date().toISOString().split('T')[0];
   form.data=document.getElementById('data').value;
   ['hodhor','litros','responsavel'].forEach(id=>document.getElementById(id).value='');
+  const bt=document.getElementById('bem-terceiros');
+  if(bt){bt.value='';bt.style.display='none';}
+  const bnt=document.getElementById('btn-terceiros-next');
+  if(bnt) bnt.style.display='none';
   document.querySelectorAll('.opt').forEach(o=>o.classList.remove('selected'));
   const cardT=document.getElementById('card-talhao');
   if(cardT) cardT.style.display='none';
@@ -1308,23 +1367,57 @@ function renderPainel(){
     <canvas id="chart-op-media" style="width:100%;display:block"></canvas>`;
   desenharBarrasMedia(document.getElementById('chart-op-media'), opMediaData, getCorCSS('--ouro'));
 
-  // ── BLOCO 4: Média por Bem — barras horizontais ──
-  // CÁLCULO: para cada bem (máquina), soma litros e divide pela qtd de abastecimentos dela
-  const bemGroups={};
-  dados.forEach(r=>{
-    if(!r.bem)return;
-    if(!bemGroups[r.bem])bemGroups[r.bem]={total:0,count:0};
-    bemGroups[r.bem].total+=(parseFloat(r.litros)||0);
-    bemGroups[r.bem].count++;
+  // ── BLOCO 4: Consumo por Bem — L/hora ou km/L (diferença de horímetro) ──
+  // Agrupa por bem, ordena por data, calcula diferença entre leituras consecutivas
+  const bemHistMap = {};
+  dados.filter(r=>r.bem&&r.hodhor).forEach(r=>{
+    if(!bemHistMap[r.bem]) bemHistMap[r.bem]={tipo:r.tipo,leituras:[]};
+    bemHistMap[r.bem].leituras.push({hodhor:parseFloat(r.hodhor),litros:parseFloat(r.litros)||0,data:r.data||r.dataHora});
   });
-  const bemMediaData=Object.entries(bemGroups)
-    .map(([bem,v])=>({label:bem,valor:v.total/v.count,total:v.total,count:v.count}))
-    .sort((a,b)=>b.valor-a.valor).slice(0,8);
-  document.getElementById('painel-talhao').innerHTML=`
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">📊 Média por bem (máquina/veículo)</div>
-    <div style="font-size:10px;color:var(--tx3);margin-bottom:12px">Litros médios por abastecimento de cada máquina · (total de vezes entre parênteses)</div>
-    <canvas id="chart-bem-media" style="width:100%;display:block"></canvas>`;
-  desenharBarrasMedia(document.getElementById('chart-bem-media'), bemMediaData, getCorCSS('--verde'));
+  const bemEficiencia = [];
+  Object.entries(bemHistMap).forEach(([bem,{tipo,leituras}])=>{
+    leituras.sort((a,b)=>a.hodhor-b.hodhor);
+    const pares=[];
+    for(let i=1;i<leituras.length;i++){
+      const diff=leituras[i].hodhor-leituras[i-1].hodhor;
+      if(diff>0) pares.push({diff, litros:leituras[i-1].litros});
+    }
+    if(pares.length===0) return;
+    const usaKm = USA_HODOMETRO.has(tipo);
+    const totalDiff = pares.reduce((s,p)=>s+p.diff,0);
+    const totalLitros = pares.reduce((s,p)=>s+p.litros,0);
+    const valor = usaKm ? totalDiff/totalLitros : totalLitros/totalDiff;
+    bemEficiencia.push({label:bem,valor,pares:pares.length,unidade:usaKm?'km/L':'L/h'});
+  });
+  bemEficiencia.sort((a,b)=>{
+    // Para L/h: maior = mais consumo (ordem desc). Para km/L: menor = mais consumo (ordem asc)
+    const aLh = a.unidade==='L/h';
+    return aLh ? b.valor-a.valor : a.valor-b.valor;
+  });
+  if(bemEficiencia.length>0){
+    const maxVal = Math.max(...bemEficiencia.map(x=>x.valor),1);
+    const barras = bemEficiencia.slice(0,10).map(x=>{
+      const pct = Math.round(x.valor/maxVal*100);
+      const cor = x.unidade==='L/h' ? 'var(--verde)' : 'var(--ouro)';
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+          <span style="font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%">${x.label}</span>
+          <span style="font-weight:700;color:var(--tx2);margin-left:8px">${x.valor.toLocaleString('pt-BR',{maximumFractionDigits:2})} ${x.unidade} <span style="font-weight:400;color:var(--tx3)">(${x.pares} par${x.pares>1?'es':''})</span></span>
+        </div>
+        <div style="background:var(--bd);border-radius:99px;height:8px;overflow:hidden">
+          <div style="height:100%;border-radius:99px;background:${cor};width:${pct}%"></div>
+        </div>
+      </div>`;
+    }).join('');
+    document.getElementById('painel-talhao').innerHTML=`
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">⚡ Eficiência por bem</div>
+      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">🟢 L/hora (horímetro) · 🟡 km/L (hodômetro) — calculado pela diferença entre leituras consecutivas</div>
+      ${barras}`;
+  }else{
+    document.getElementById('painel-talhao').innerHTML=`
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:6px">⚡ Eficiência por bem</div>
+      <p style="font-size:12px;color:var(--tx3);margin:0">Necessário pelo menos 2 abastecimentos com horímetro/hodômetro registrado na mesma máquina para calcular.</p>`;
+  }
 
   // ── BLOCO 5: Tabela cruzada Operação × Talhão (suporta múltiplos talhões por abastecimento) ──
   // Helper: normaliza talhao para array
