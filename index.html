@@ -1234,9 +1234,14 @@ function salvarEdicao(){
 function fecharEdicao(){document.getElementById('modal-edit').classList.remove('open');}
 
 function excluirRegistro(id){
-  if(!confirm('Excluir este registro?')) return;
+  if(!confirm('Excluir este registro? Será removido de todos os dispositivos.')) return;
   const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]').filter(x=>x.id!==id);
   localStorage.setItem('abast_hist',JSON.stringify(hist));
+  // Remove também dos pendentes (caso nunca tenha sido enviado)
+  const pend=JSON.parse(localStorage.getItem('abast_pendentes')||'[]').filter(x=>x.id!==id);
+  localStorage.setItem('abast_pendentes',JSON.stringify(pend));
+  // Remove do Firebase
+  if(typeof window.excluirDoFirebase==='function') window.excluirDoFirebase(id);
   renderHistoricoMain();
 }
 
@@ -1859,7 +1864,7 @@ iniciarHistoricoMain();
 <!-- ═══════ SINCRONIZAÇÃO ONLINE (Firebase) ═══════ -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getDatabase, ref, set, onValue, get } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import { getDatabase, ref, set, onValue, get, remove } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
 // Config embutida — todos os celulares conectam automaticamente
 const FIREBASE_CONFIG = {
@@ -1918,6 +1923,13 @@ window.salvarConfigRemoto = async function(chave, valor){
   if(!window.SYNC.ativo) return;
   try{ await set(ref(window.SYNC.db,'config/'+chave), JSON.stringify(valor)); }
   catch(e){ console.warn('Erro ao salvar config remoto:', e); }
+};
+
+// Remove um abastecimento do Firebase
+window.excluirDoFirebase = async function(id){
+  if(!window.SYNC.ativo) return;
+  try{ await remove(ref(window.SYNC.db,'abastecimentos/'+id)); }
+  catch(e){ console.warn('Erro ao excluir do Firebase:', e); }
 };
 
 // Escuta mudanças de config vindas de outros dispositivos
