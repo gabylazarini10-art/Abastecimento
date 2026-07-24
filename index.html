@@ -1372,14 +1372,21 @@ function renderPainel(){
   desenharBarrasMedia(document.getElementById('chart-op-media'), opMediaData, getCorCSS('--ouro'));
 
   // ── BLOCO 4: Consumo por Bem — L/hora ou km/L (diferença de horímetro) ──
-  // Agrupa por bem, ordena por data, calcula diferença entre leituras consecutivas
+  // Usa o histórico COMPLETO para calcular pares (não só o filtrado por fazenda)
+  // para garantir que máquinas com registros em fazendas diferentes apareçam
+  const histCompleto = JSON.parse(localStorage.getItem('abast_hist')||'[]');
+  // Determina quais bens aparecem nos dados filtrados
+  const bensNoFiltro = new Set(dados.filter(r=>r.bem).map(r=>r.bem.trim().toUpperCase()));
   const bemHistMap = {};
-  dados.filter(r=>r.bem&&r.hodhor).forEach(r=>{
-    if(!bemHistMap[r.bem]) bemHistMap[r.bem]={tipo:r.tipo,leituras:[]};
-    bemHistMap[r.bem].leituras.push({hodhor:parseFloat(r.hodhor),litros:parseFloat(r.litros)||0,data:r.data||r.dataHora});
+  histCompleto.filter(r=>r.bem&&r.hodhor).forEach(r=>{
+    const bemKey = r.bem.trim().toUpperCase(); // normaliza para evitar duplicatas por espaço/case
+    if(!bemHistMap[bemKey]) bemHistMap[bemKey]={tipo:r.tipo,bemOriginal:r.bem.trim(),leituras:[]};
+    bemHistMap[bemKey].leituras.push({hodhor:parseFloat(r.hodhor),litros:parseFloat(r.litros)||0,data:r.data||r.dataHora});
   });
   const bemEficiencia = [];
-  Object.entries(bemHistMap).forEach(([bem,{tipo,leituras}])=>{
+  Object.entries(bemHistMap).forEach(([bemKey,{tipo,bemOriginal,leituras}])=>{
+    // Só mostra máquinas que têm pelo menos 1 registro no filtro atual
+    if(!bensNoFiltro.has(bemKey)) return;
     leituras.sort((a,b)=>a.hodhor-b.hodhor);
     const pares=[];
     for(let i=1;i<leituras.length;i++){
@@ -1387,9 +1394,9 @@ function renderPainel(){
       if(diff<=0) continue;
       const usaKmPar = USA_HODOMETRO.has(tipo);
       const val = usaKmPar ? diff/leituras[i-1].litros : leituras[i-1].litros/diff;
-      // Filtrar valores fisicamente impossíveis
-      if(usaKmPar && val>30) return; // >30 km/L impossível para esses veículos
-      if(!usaKmPar && val>50) return; // >50 L/h impossível para qualquer máquina agrícola
+      // Filtrar valores fisicamente impossíveis — descarta só o par, não a máquina inteira
+      if(usaKmPar && val>30) continue; // >30 km/L impossível para esses veículos
+      if(!usaKmPar && val>150) continue; // >150 L/h impossível para qualquer máquina agrícola
       if(val>0) pares.push({diff, litros:leituras[i-1].litros, val});
     }
     if(pares.length===0) return;
@@ -1398,7 +1405,7 @@ function renderPainel(){
     const totalLitros = pares.reduce((s,p)=>s+p.litros,0);
     const valor = usaKm ? totalDiff/totalLitros : totalLitros/totalDiff;
     if(valor<=0||!isFinite(valor)) return;
-    bemEficiencia.push({label:bem,valor,pares:pares.length,unidade:usaKm?'km/L':'L/h'});
+    bemEficiencia.push({label:bemOriginal,valor,pares:pares.length,unidade:usaKm?'km/L':'L/h'});
   });
   bemEficiencia.sort((a,b)=>{
     // Para L/h: maior = mais consumo (ordem desc). Para km/L: menor = mais consumo (ordem asc)
@@ -1561,7 +1568,7 @@ function exportarPDF(){
       const usaKmPar=USA_HODOMETRO.has(tipo);
       const val=usaKmPar?diff/leituras[i-1].litros:leituras[i-1].litros/diff;
       if(usaKmPar&&val>30)continue;
-      if(!usaKmPar&&val>50)continue;
+      if(!usaKmPar&&val>150)continue;
       if(val>0)pares.push({diff,litros:leituras[i-1].litros});
     }
     if(!pares.length)return null;
