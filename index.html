@@ -1528,7 +1528,6 @@ function renderPainel(){
 
 function exportarPDF(){
   renderPainel();
-  // Coleta dados atuais
   const hist=JSON.parse(localStorage.getItem('abast_hist')||'[]');
   const fz=document.getElementById('painel-fazenda').value;
   const dataIni=document.getElementById('painel-data-ini').value;
@@ -1547,57 +1546,125 @@ function exportarPDF(){
     'Gerado em '+new Date().toLocaleString('pt-BR'),
   ].filter(Boolean).join(' · ');
 
-  // Tabela por operação
+  // ── Consumo por Operação ──
   const opG={};
   dados.forEach(r=>{if(r.operacao){if(!opG[r.operacao])opG[r.operacao]={t:0,c:0};opG[r.operacao].t+=(parseFloat(r.litros)||0);opG[r.operacao].c++;}});
   const opRows=Object.entries(opG).sort((a,b)=>b[1].t-a[1].t)
     .map(([op,v])=>`<tr><td>${op}</td><td>${v.c}</td><td>${fmtN(v.t)} L</td><td>${fmtN(v.t/v.c)} L</td></tr>`).join('');
 
-  // Tabela eficiência por bem
+  // ── Eficiência por Bem — inclui todos, mesmo sem par ──
+  // Usa histórico completo para pares de horímetro
+  const histCompleto=JSON.parse(localStorage.getItem('abast_hist')||'[]');
+  const bensNoFiltro=new Set(dados.filter(r=>r.bem).map(r=>r.bem.trim().toUpperCase()));
   const bemHM={};
-  dados.filter(r=>r.bem&&r.hodhor).forEach(r=>{
-    if(!bemHM[r.bem])bemHM[r.bem]={tipo:r.tipo,leituras:[]};
-    bemHM[r.bem].leituras.push({hodhor:parseFloat(r.hodhor),litros:parseFloat(r.litros)||0});
+  histCompleto.filter(r=>r.bem).forEach(r=>{
+    const k=r.bem.trim().toUpperCase();
+    if(!bemHM[k])bemHM[k]={tipo:r.tipo,bemOrig:r.bem.trim(),leituras:[],totalL:0,count:0};
+    bemHM[k].totalL+=(parseFloat(r.litros)||0);
+    bemHM[k].count++;
+    if(r.hodhor) bemHM[k].leituras.push({hodhor:parseFloat(r.hodhor),litros:parseFloat(r.litros)||0});
   });
-  const efRows=Object.entries(bemHM).map(([bem,{tipo,leituras}])=>{
-    leituras.sort((a,b)=>a.hodhor-b.hodhor);
-    const pares=[];
-    for(let i=1;i<leituras.length;i++){
-      const diff=leituras[i].hodhor-leituras[i-1].hodhor;
-      if(diff<=0)continue;
-      const usaKmPar=USA_HODOMETRO.has(tipo);
-      const val=usaKmPar?diff/leituras[i-1].litros:leituras[i-1].litros/diff;
-      if(usaKmPar&&val>30)continue;
-      if(!usaKmPar&&val>150)continue;
-      if(val>0)pares.push({diff,litros:leituras[i-1].litros});
-    }
-    if(!pares.length)return null;
-    const usaKm=USA_HODOMETRO.has(tipo);
-    const tD=pares.reduce((s,p)=>s+p.diff,0);
-    const tL=pares.reduce((s,p)=>s+p.litros,0);
-    const val=usaKm?tD/tL:tL/tD;
-    if(!isFinite(val)||val<=0)return null;
-    return `<tr><td>${bem}</td><td>${tipo}</td><td>${fmtN(val,2)} ${usaKm?'km/L':'L/h'}</td><td>${pares.length}</td></tr>`;
-  }).filter(Boolean).join('');
+  const efRows=Object.entries(bemHM)
+    .filter(([k])=>bensNoFiltro.has(k))
+    .map(([k,{tipo,bemOrig,leituras,totalL:tL,count}])=>{
+      const usaKm=USA_HODOMETRO.has(tipo);
+      // Tentar calcular eficiência por pares
+      leituras.sort((a,b)=>a.hodhor-b.hodhor);
+      const pares=[];
+      for(let i=1;i<leituras.length;i++){
+        const diff=leituras[i].hodhor-leituras[i-1].hodhor;
+        if(diff<=0)continue;
+        const val=usaKm?diff/leituras[i-1].litros:leituras[i-1].litros/diff;
+        if(usaKm&&val>30)continue;
+        if(!usaKm&&val>150)continue;
+        if(val>0)pares.push({diff,litros:leituras[i-1].litros});
+      }
+      let efCol='—';
+      let paresCol='Sem par';
+      if(pares.length>0){
+        const tD=pares.reduce((s,p)=>s+p.diff,0);
+        const tLit=pares.reduce((s,p)=>s+p.litros,0);
+        const val=usaKm?tD/tLit:tLit/tD;
+        if(isFinite(val)&&val>0){
+          efCol=fmtN(val,2)+' '+(usaKm?'km/L':'L/h');
+          paresCol=pares.length+' par'+(pares.length>1?'es':'');
+        }
+      }else if(leituras.length===1){
+        // Sem par: mostra só o único abastecimento
+        efCol='1 abastec. ('+fmtN(leituras[0].litros)+' L, h:'+leituras[0].hodhor+')';
+        paresCol='Sem par';
+      }else if(leituras.length===0){
+        efCol=fmtN(tL/count)+' L/abast. (sem horímetro)';
+        paresCol='—';
+      }
+      return `<tr><td>${bemOrig}</td><td>${tipo}</td><td>${efCol}</td><td>${paresCol}</td></tr>`;
+    }).join('');
+
+  // ── Tabela Operação × Talhão ──
+  const getTals=r=>Array.isArray(r.talhao)?r.talhao.filter(t=>t&&t!==NAO_SE_APLICA):(r.talhao&&r.talhao!==NAO_SE_APLICA?[r.talhao]:[]);
+  const dadosTal=dados.filter(r=>getTals(r).length>0&&r.operacao);
+  let talhaoSection='';
+  if(dadosTal.length){
+    const ops=[...new Set(dadosTal.map(r=>r.operacao))].sort();
+    const tals=[...new Set(dadosTal.flatMap(r=>getTals(r)))].sort();
+    // Mapa áreas
+    const areaMap={};
+    const fazsParaLer=fz?[fz]:LISTAS.fazendas;
+    fazsParaLer.forEach(fa=>{(TALHOES[fa]||[]).forEach(t=>{const nm=typeof t==='object'?t.nome:t;const ar=typeof t==='object'&&t.area?parseFloat(t.area):null;if(ar)areaMap[nm]=ar;});});
+    const mapa={};
+    dadosTal.forEach(r=>{
+      const ts=getTals(r);const litros=parseFloat(r.litros)||0;
+      const areas=ts.map(t=>areaMap[t]||null);
+      const areaTotal=areas.every(a=>a!==null)?areas.reduce((s,a)=>s+a,0):null;
+      ts.forEach((t,i)=>{
+        const lt=areaTotal?litros*(areas[i]/areaTotal):litros/ts.length;
+        if(!mapa[r.operacao])mapa[r.operacao]={};
+        if(!mapa[r.operacao][t])mapa[r.operacao][t]={total:0,count:0};
+        mapa[r.operacao][t].total+=lt;
+        mapa[r.operacao][t].count++;
+      });
+    });
+    const thTal=`<tr><th>Operação</th>${tals.map(t=>`<th>${t}${areaMap[t]?' ('+areaMap[t]+' ha)':''}</th>`).join('')}<th>Total</th></tr>`;
+    const bdTal=ops.map(op=>{
+      let rowTot=0;
+      const cells=tals.map(t=>{
+        const v=mapa[op]&&mapa[op][t];
+        if(!v)return '<td>—</td>';
+        rowTot+=v.total;
+        const lha=areaMap[t]?`<br><small>${fmtN(v.total/areaMap[t],1)} L/ha</small>`:'';
+        return `<td>${fmtN(v.total)} L${lha}</td>`;
+      }).join('');
+      return `<tr><td><b>${op}</b></td>${cells}<td><b>${fmtN(rowTot)} L</b></td></tr>`;
+    }).join('');
+    // Linha de total por talhão
+    const totTal=`<tr style="background:#D8F3DC;font-weight:bold"><td>TOTAL</td>${tals.map(t=>{
+      let tot=0;ops.forEach(op=>{if(mapa[op]&&mapa[op][t])tot+=mapa[op][t].total;});
+      const lha=areaMap[t]?`<br><small>${fmtN(tot/areaMap[t],1)} L/ha</small>`:'';
+      return `<td>${fmtN(tot)} L${lha}</td>`;
+    }).join('')}<td>${fmtN(ops.reduce((s,op)=>s+(tals.reduce((ss,t)=>ss+(mapa[op]&&mapa[op][t]?mapa[op][t].total:0),0)),0))} L</td></tr>`;
+    talhaoSection=`<h2>📋 Operação × Talhão</h2>
+    <table><thead>${thTal}</thead><tbody>${bdTal}</tbody><tfoot>${totTal}</tfoot></table>`;
+  }
 
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
   <title>Análise de Abastecimento — Agro Lazarini</title>
   <style>
-    body{font-family:Arial,sans-serif;font-size:12pt;margin:20mm;color:#1C1C1C}
+    body{font-family:Arial,sans-serif;font-size:11pt;margin:15mm;color:#1C1C1C}
     h1{font-size:18pt;color:#2D6A4F;margin:0 0 4px}
     .sub{font-size:9pt;color:#777;margin-bottom:20px}
-    h2{font-size:13pt;color:#1B4332;border-bottom:2px solid #2D6A4F;padding-bottom:4px;margin:20px 0 10px}
-    .kpis{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
-    .kpi{border:1px solid #ccc;border-radius:8px;padding:10px 18px;text-align:center;min-width:120px}
-    .kpi-val{font-size:22pt;font-weight:bold;color:#2D6A4F}
+    h2{font-size:13pt;color:#1B4332;border-bottom:2px solid #2D6A4F;padding-bottom:4px;margin:24px 0 10px;page-break-before:auto}
+    .kpis{display:flex;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+    .kpi{border:1px solid #ccc;border-radius:8px;padding:10px 18px;text-align:center;min-width:110px}
+    .kpi-val{font-size:20pt;font-weight:bold;color:#2D6A4F}
     .kpi-lbl{font-size:8pt;color:#777;text-transform:uppercase}
-    table{width:100%;border-collapse:collapse;margin-bottom:16px}
-    th{background:#1B4332;color:#fff;padding:8px 10px;font-size:10pt;text-align:left}
-    td{padding:7px 10px;border-bottom:1px solid #eee;font-size:10pt}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:10pt}
+    th{background:#1B4332;color:#fff;padding:7px 9px;text-align:left}
+    td{padding:6px 9px;border-bottom:1px solid #eee;vertical-align:top}
     tr:nth-child(even) td{background:#f9f9f9}
     tfoot td{background:#D8F3DC;font-weight:bold;border-top:2px solid #2D6A4F}
-    @page{margin:15mm;size:A4}
-    @media print{body{margin:0}}
+    small{color:#2D6A4F;font-size:8pt}
+    @page{margin:12mm;size:A4}
+    @media print{body{margin:0};h2{page-break-before:auto}}
   </style></head><body>
   <h1>⛽ Análise de Abastecimento</h1>
   <div class="sub">${periodo}</div>
@@ -1609,9 +1676,10 @@ function exportarPDF(){
   <h2>📊 Consumo por Operação</h2>
   <table><thead><tr><th>Operação</th><th>Abastecimentos</th><th>Total Litros</th><th>Média/abastec.</th></tr></thead>
   <tbody>${opRows}</tbody></table>
-  ${efRows?`<h2>⚡ Eficiência por Bem</h2>
-  <table><thead><tr><th>Bem</th><th>Tipo</th><th>Eficiência</th><th>Pares calculados</th></tr></thead>
-  <tbody>${efRows}</tbody></table>`:''}
+  <h2>⚡ Eficiência por Bem</h2>
+  <table><thead><tr><th>Bem</th><th>Tipo</th><th>Eficiência</th><th>Observação</th></tr></thead>
+  <tbody>${efRows}</tbody></table>
+  ${talhaoSection}
   <script>window.onload=()=>{ window.print(); }<\/script>
   </body></html>`;
 
