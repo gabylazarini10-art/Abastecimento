@@ -1372,56 +1372,58 @@ function renderPainel(){
   desenharBarrasMedia(document.getElementById('chart-op-media'), opMediaData, getCorCSS('--ouro'));
 
   // ── BLOCO 4: Consumo por Bem — L/hora ou km/L (diferença de horímetro) ──
-  // Usa o histórico COMPLETO para calcular pares (não só o filtrado por fazenda)
-  // para garantir que máquinas com registros em fazendas diferentes apareçam
+  // Usa o histórico COMPLETO para calcular eficiência (não só o filtrado por fazenda)
+  // Lógica: horímetro final − horímetro inicial = horas trabalhadas; total litros ÷ horas = L/h
   const histCompleto = JSON.parse(localStorage.getItem('abast_hist')||'[]');
   // Determina quais bens aparecem nos dados filtrados
   const bensNoFiltro = new Set(dados.filter(r=>r.bem).map(r=>r.bem.trim().toUpperCase()));
+  // Para o cálculo de eficiência, filtra pelo mesmo período da análise (dataIni/dataFim/fazenda)
+  // mas usa dados filtrados (dados) para garantir que o período seja respeitado
   const bemHistMap = {};
-  histCompleto.filter(r=>r.bem&&r.hodhor).forEach(r=>{
-    const bemKey = r.bem.trim().toUpperCase(); // normaliza para evitar duplicatas por espaço/case
-    if(!bemHistMap[bemKey]) bemHistMap[bemKey]={tipo:r.tipo,bemOriginal:r.bem.trim(),leituras:[]};
-    bemHistMap[bemKey].leituras.push({hodhor:parseFloat(r.hodhor),litros:parseFloat(r.litros)||0,data:r.data||r.dataHora});
+  dados.filter(r=>r.bem&&r.hodhor).forEach(r=>{
+    const bemKey = r.bem.trim().toUpperCase();
+    if(!bemHistMap[bemKey]) bemHistMap[bemKey]={tipo:r.tipo,bemOriginal:r.bem.trim(),leituras:[],totalLitros:0};
+    const hod = parseFloat(r.hodhor);
+    const lit = parseFloat(r.litros)||0;
+    if(!isNaN(hod) && hod>0){
+      bemHistMap[bemKey].leituras.push(hod);
+      bemHistMap[bemKey].totalLitros += lit;
+    }
   });
   const bemEficiencia = [];
-  Object.entries(bemHistMap).forEach(([bemKey,{tipo,bemOriginal,leituras}])=>{
-    // Só mostra máquinas que têm pelo menos 1 registro no filtro atual
+  Object.entries(bemHistMap).forEach(([bemKey,{tipo,bemOriginal,leituras,totalLitros}])=>{
     if(!bensNoFiltro.has(bemKey)) return;
-    leituras.sort((a,b)=>a.hodhor-b.hodhor);
-    const pares=[];
-    for(let i=1;i<leituras.length;i++){
-      const diff=leituras[i].hodhor-leituras[i-1].hodhor;
-      if(diff<=0) continue;
-      const usaKmPar = USA_HODOMETRO.has(tipo);
-      const val = usaKmPar ? diff/leituras[i-1].litros : leituras[i-1].litros/diff;
-      // Filtrar valores fisicamente impossíveis — descarta só o par, não a máquina inteira
-      if(usaKmPar && val>30) continue; // >30 km/L impossível para esses veículos
-      if(!usaKmPar && val>150) continue; // >150 L/h impossível para qualquer máquina agrícola
-      if(val>0) pares.push({diff, litros:leituras[i-1].litros, val});
-    }
-    if(pares.length===0) return;
+    if(leituras.length < 2) return; // precisa de pelo menos 2 leituras para calcular
+    const hodMin = Math.min(...leituras);
+    const hodMax = Math.max(...leituras);
+    const totalHoras = hodMax - hodMin;
+    if(totalHoras <= 0 || totalLitros <= 0) return;
     const usaKm = USA_HODOMETRO.has(tipo);
-    const totalDiff = pares.reduce((s,p)=>s+p.diff,0);
-    const totalLitros = pares.reduce((s,p)=>s+p.litros,0);
-    const valor = usaKm ? totalDiff/totalLitros : totalLitros/totalDiff;
-    if(valor<=0||!isFinite(valor)) return;
-    bemEficiencia.push({label:bemOriginal,valor,pares:pares.length,unidade:usaKm?'km/L':'L/h'});
+    const valor = usaKm ? totalHoras/totalLitros : totalLitros/totalHoras;
+    if(!isFinite(valor) || valor <= 0) return;
+    // Validação anti-absurdo
+    if(usaKm && valor > 30) return;
+    if(!usaKm && valor > 150) return;
+    bemEficiencia.push({label:bemOriginal, valor, abast:leituras.length, horas:totalHoras, litros:totalLitros, unidade:usaKm?'km/L':'L/h'});
   });
   bemEficiencia.sort((a,b)=>{
-    // Para L/h: maior = mais consumo (ordem desc). Para km/L: menor = mais consumo (ordem asc)
     const aLh = a.unidade==='L/h';
     return aLh ? b.valor-a.valor : a.valor-b.valor;
   });
   if(bemEficiencia.length>0){
     const maxVal = Math.max(...bemEficiencia.map(x=>x.valor),1);
-    const barras = bemEficiencia.slice(0,10).map(x=>{
+    const barras = bemEficiencia.slice(0,12).map(x=>{
       const pct = Math.round(x.valor/maxVal*100);
       const cor = x.unidade==='L/h' ? 'var(--verde)' : 'var(--ouro)';
+      const detalhe = x.unidade==='L/h'
+        ? `${x.litros.toLocaleString('pt-BR',{maximumFractionDigits:0})} L ÷ ${x.horas.toLocaleString('pt-BR',{maximumFractionDigits:1})} h`
+        : `${x.horas.toLocaleString('pt-BR',{maximumFractionDigits:0})} km ÷ ${x.litros.toLocaleString('pt-BR',{maximumFractionDigits:0})} L`;
       return `<div style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
-          <span style="font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%">${x.label}</span>
-          <span style="font-weight:700;color:var(--tx2);margin-left:8px">${x.valor.toLocaleString('pt-BR',{maximumFractionDigits:2})} ${x.unidade} <span style="font-weight:400;color:var(--tx3)">(${x.pares} par${x.pares>1?'es':''})</span></span>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+          <span style="font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%">${x.label}</span>
+          <span style="font-weight:700;color:var(--tx2);margin-left:8px">${x.valor.toLocaleString('pt-BR',{maximumFractionDigits:2})} ${x.unidade}</span>
         </div>
+        <div style="font-size:9px;color:var(--tx3);margin-bottom:3px">${detalhe} · ${x.abast} abastec.</div>
         <div style="background:var(--bd);border-radius:99px;height:8px;overflow:hidden">
           <div style="height:100%;border-radius:99px;background:${cor};width:${pct}%"></div>
         </div>
@@ -1429,7 +1431,7 @@ function renderPainel(){
     }).join('');
     document.getElementById('painel-talhao').innerHTML=`
       <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:3px">⚡ Eficiência por bem</div>
-      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">🟢 L/hora (horímetro) · 🟡 km/L (hodômetro) — calculado pela diferença entre leituras consecutivas</div>
+      <div style="font-size:10px;color:var(--tx3);margin-bottom:10px">🟢 L/hora · 🟡 km/L — total de litros ÷ (horímetro final − horímetro inicial) no período</div>
       ${barras}`;
   }else{
     document.getElementById('painel-talhao').innerHTML=`
@@ -1552,52 +1554,43 @@ function exportarPDF(){
   const opRows=Object.entries(opG).sort((a,b)=>b[1].t-a[1].t)
     .map(([op,v])=>`<tr><td>${op}</td><td>${v.c}</td><td>${fmtN(v.t)} L</td><td>${fmtN(v.t/v.c)} L</td></tr>`).join('');
 
-  // ── Eficiência por Bem — inclui todos, mesmo sem par ──
-  // Usa histórico completo para pares de horímetro
-  const histCompleto=JSON.parse(localStorage.getItem('abast_hist')||'[]');
-  const bensNoFiltro=new Set(dados.filter(r=>r.bem).map(r=>r.bem.trim().toUpperCase()));
+  // ── Eficiência por Bem (PDF) — lógica: total litros ÷ (hodhor_final − hodhor_inicial) ──
   const bemHM={};
-  histCompleto.filter(r=>r.bem).forEach(r=>{
+  dados.filter(r=>r.bem&&r.hodhor).forEach(r=>{
     const k=r.bem.trim().toUpperCase();
-    if(!bemHM[k])bemHM[k]={tipo:r.tipo,bemOrig:r.bem.trim(),leituras:[],totalL:0,count:0};
-    bemHM[k].totalL+=(parseFloat(r.litros)||0);
+    if(!bemHM[k])bemHM[k]={tipo:r.tipo,bemOrig:r.bem.trim(),hodhors:[],totalL:0,count:0};
+    const hod=parseFloat(r.hodhor);
+    if(!isNaN(hod)&&hod>0){
+      bemHM[k].hodhors.push(hod);
+      bemHM[k].totalL+=(parseFloat(r.litros)||0);
+    }
     bemHM[k].count++;
-    if(r.hodhor) bemHM[k].leituras.push({hodhor:parseFloat(r.hodhor),litros:parseFloat(r.litros)||0});
   });
   const efRows=Object.entries(bemHM)
     .filter(([k])=>bensNoFiltro.has(k))
-    .map(([k,{tipo,bemOrig,leituras,totalL:tL,count}])=>{
+    .map(([k,{tipo,bemOrig,hodhors,totalL:tL,count}])=>{
       const usaKm=USA_HODOMETRO.has(tipo);
-      // Tentar calcular eficiência por pares
-      leituras.sort((a,b)=>a.hodhor-b.hodhor);
-      const pares=[];
-      for(let i=1;i<leituras.length;i++){
-        const diff=leituras[i].hodhor-leituras[i-1].hodhor;
-        if(diff<=0)continue;
-        const val=usaKm?diff/leituras[i-1].litros:leituras[i-1].litros/diff;
-        if(usaKm&&val>30)continue;
-        if(!usaKm&&val>150)continue;
-        if(val>0)pares.push({diff,litros:leituras[i-1].litros});
-      }
       let efCol='—';
-      let paresCol='Sem par';
-      if(pares.length>0){
-        const tD=pares.reduce((s,p)=>s+p.diff,0);
-        const tLit=pares.reduce((s,p)=>s+p.litros,0);
-        const val=usaKm?tD/tLit:tLit/tD;
-        if(isFinite(val)&&val>0){
-          efCol=fmtN(val,2)+' '+(usaKm?'km/L':'L/h');
-          paresCol=pares.length+' par'+(pares.length>1?'es':'');
+      let obsCol='Sem horímetro suficiente';
+      if(hodhors.length>=2){
+        const hodMin=Math.min(...hodhors);
+        const hodMax=Math.max(...hodhors);
+        const totalHoras=hodMax-hodMin;
+        if(totalHoras>0&&tL>0){
+          const val=usaKm?totalHoras/tL:tL/totalHoras;
+          if(isFinite(val)&&val>0&&(usaKm?val<=30:val<=150)){
+            efCol=fmtN(val,2)+' '+(usaKm?'km/L':'L/h');
+            obsCol=(usaKm?fmtN(totalHoras,0)+' km ÷ ':fmtN(tL,0)+' L ÷ ')+(usaKm?fmtN(tL,0)+' L':fmtN(totalHoras,1)+' h')+' · '+hodhors.length+' abastec.';
+          }
         }
-      }else if(leituras.length===1){
-        // Sem par: mostra só o único abastecimento
-        efCol='1 abastec. ('+fmtN(leituras[0].litros)+' L, h:'+leituras[0].hodhor+')';
-        paresCol='Sem par';
-      }else if(leituras.length===0){
-        efCol=fmtN(tL/count)+' L/abast. (sem horímetro)';
-        paresCol='—';
+      }else if(hodhors.length===1){
+        efCol='—';
+        obsCol='Apenas 1 leitura (necessário mínimo 2)';
+      }else{
+        efCol=fmtN(tL/count,1)+' L/abast.';
+        obsCol='Sem horímetro registrado';
       }
-      return `<tr><td>${bemOrig}</td><td>${tipo}</td><td>${efCol}</td><td>${paresCol}</td></tr>`;
+      return `<tr><td>${bemOrig}</td><td>${tipo}</td><td>${efCol}</td><td>${obsCol}</td></tr>`;
     }).join('');
 
   // ── Tabela Operação × Talhão ──
