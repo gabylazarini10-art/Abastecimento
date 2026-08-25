@@ -1227,6 +1227,16 @@ function salvarEdicao(){
     responsavel: document.getElementById('edit-responsavel').value,
   };
   localStorage.setItem('abast_hist',JSON.stringify(hist));
+  // Sincroniza edição com Firebase — sobrescreve o registro existente
+  const regEditado = hist[idx];
+  const tentarSincEdicao=(tentativas)=>{
+    if(typeof window.enviarParaFirebase==='function'){
+      window.enviarParaFirebase(regEditado);
+    }else if(tentativas>0){
+      setTimeout(()=>tentarSincEdicao(tentativas-1),1000);
+    }
+  };
+  tentarSincEdicao(5);
   fecharEdicao();
   renderHistoricoMain();
 }
@@ -2041,14 +2051,25 @@ function escutarRemoto(){
     const remotos = Object.values(remoto).filter(r=>r&&r.id);
     if(!remotos.length){ atualizarStatusSync(); return; }
     let hist = JSON.parse(localStorage.getItem('abast_hist')||'[]');
-    const localMap = {};
-    hist.forEach(r=>{ if(r.id) localMap[r.id]=true; });
+    // Mapa local: id → índice no array
+    const localIdx = {};
+    hist.forEach((r,i)=>{ if(r.id) localIdx[r.id]=i; });
     let mudou = false;
     remotos.forEach(r=>{
-      if(!localMap[r.id]){ hist.push(r); localMap[r.id]=true; mudou=true; }
+      if(localIdx[r.id]===undefined){
+        // Registro novo — adiciona
+        hist.push(r); mudou=true;
+      } else {
+        // Registro existente — atualiza se o remoto for mais recente
+        const local = hist[localIdx[r.id]];
+        const tsRemoto = new Date(r.dataHora||0).getTime();
+        const tsLocal  = new Date(local.dataHora||0).getTime();
+        if(JSON.stringify(r)!==JSON.stringify(local)){
+          hist[localIdx[r.id]] = r; mudou=true;
+        }
+      }
     });
     if(mudou){
-      // Ordena por data/hora mais recente primeiro
       hist.sort((a,b)=>new Date(b.dataHora||0)-new Date(a.dataHora||0));
       localStorage.setItem('abast_hist', JSON.stringify(hist));
       if(typeof window.onSyncUpdate==='function') window.onSyncUpdate();
