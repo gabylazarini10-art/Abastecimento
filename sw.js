@@ -1,4 +1,4 @@
-const CACHE = 'abastecimento-v3';
+const CACHE = 'abastecimento-v4';
 const ARQUIVOS = [
   './',
   './index.html',
@@ -25,19 +25,20 @@ self.addEventListener('activate', e=>{
 
 self.addEventListener('fetch', e=>{
   if(e.request.method !== 'GET') return;
-  // Offline-first: tenta cache primeiro, busca na rede em background
+
+  // Network-first: tenta buscar a versão mais nova primeiro.
+  // Só usa o cache se estiver offline (a internet falhar).
+  // Isso garante que qualquer atualização no GitHub chegue no celular
+  // assim que houver internet, sem precisar limpar cache manualmente.
   e.respondWith(
-    caches.open(CACHE).then(cache =>
-      cache.match(e.request).then(cached => {
-        const network = fetch(e.request).then(resp => {
-          if(resp && resp.status === 200 && resp.type !== 'opaque'){
-            cache.put(e.request, resp.clone());
-          }
-          return resp;
-        }).catch(() => cached);
-        // Retorna cache imediatamente se disponível, senão espera a rede
-        return cached || network;
-      })
+    fetch(e.request).then(resp => {
+      if(resp && resp.status === 200 && resp.type !== 'opaque'){
+        const copy = resp.clone();
+        caches.open(CACHE).then(cache => cache.put(e.request, copy));
+      }
+      return resp;
+    }).catch(() =>
+      caches.match(e.request).then(cached => cached || caches.match('./index.html'))
     )
   );
 });
