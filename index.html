@@ -216,6 +216,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
+<div id="alerta-estoque" style="display:none"></div>
+
 <!-- ABAS PRINCIPAIS -->
 <div class="main-tabs">
   <button class="main-tab" id="maintab-historico" onclick="trocarMainTab('historico')">
@@ -457,6 +459,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       Aqui você edita as listas usadas no formulário (fazendas, safras, operações e bens) sem precisar editar o código.
       Use isso quando comprar/vender equipamento, abrir nova safra, etc.
     </p>
+
+
+    <div class="card" style="background:#FFF8E1;border-color:#FFD54F">
+      <span class="field-label">⛽ Estoque de diesel por fazenda</span>
+      <div id="estoque-saldos" style="margin:8px 0 12px"></div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:6px">Registrar movimento</div>
+      <select class="filter-select" id="est-fazenda" style="width:100%;margin-bottom:6px"></select>
+      <select class="filter-select" id="est-tipo" style="width:100%;margin-bottom:6px">
+        <option value="entrada">Entrada (compra de diesel)</option>
+        <option value="inicial">Saldo inicial (contagem do tanque)</option>
+        <option value="ajuste">Ajuste (+ ou −)</option>
+      </select>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="inp" type="date" id="est-data" style="flex:1">
+        <input class="inp" type="number" inputmode="decimal" step="any" id="est-litros" placeholder="Litros" style="flex:1">
+      </div>
+      <input class="inp" type="text" id="est-resp" placeholder="Quem registrou" style="width:100%;margin-bottom:6px">
+      <input class="inp" type="text" id="est-obs" placeholder="Observação / nota fiscal (opcional)" style="width:100%;margin-bottom:8px">
+      <button class="btn-novo" style="font-size:13px;padding:9px 16px" onclick="adicionarEstoque()">+ Registrar</button>
+      <div style="font-size:12px;font-weight:600;margin:14px 0 6px">Últimos movimentos</div>
+      <div id="estoque-lista"></div>
+      <p style="font-size:11px;color:var(--tx3);margin-top:8px">O saldo = entradas − litros dos abastecimentos da fazenda a partir da data do primeiro lançamento. Alerta abaixo de 500 L.</p>
+    </div>
 
     <div class="card" style="background:#E8F4FB;border-color:#90CAF9">
       <span class="field-label">🔄 Sincronização Online</span>
@@ -777,6 +802,8 @@ window.onSyncUpdate = function(){
   if(bensRemoto){ Object.assign(BENS, bensRemoto); window.BENS = BENS; }
   const listasRemoto = JSON.parse(localStorage.getItem('abast_listas')||'null');
   if(listasRemoto){ Object.assign(LISTAS, listasRemoto); window.LISTAS = LISTAS; }
+  try{ const est=JSON.parse(localStorage.getItem('abast_estoque')||'[]'); ESTOQUE.length=0; est.forEach(x=>ESTOQUE.push(x)); }catch(e){}
+  renderAlertaEstoque();
   const ativa = ['historico','novo','analise','config'].find(a=>document.getElementById('tabcontent-'+a).classList.contains('active'));
   if(ativa==='historico') iniciarHistoricoMain();
   if(ativa==='analise') iniciarPainelMain();
@@ -790,6 +817,77 @@ renderOpcoesSafra();
 renderOpcoesOperacao();
 renderOperacoesDatalist();
 renderFiltrosFazenda();
+
+
+// ══════════ ESTOQUE DE DIESEL ══════════
+const ESTOQUE_MINIMO = 500;
+let ESTOQUE = JSON.parse(localStorage.getItem('abast_estoque')||'[]');
+window.ESTOQUE = ESTOQUE;
+function salvarEstoqueLocal(){ localStorage.setItem('abast_estoque', JSON.stringify(ESTOQUE)); }
+function escHtml(t){ return String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtL(n){ return (Math.round(n*10)/10).toLocaleString('pt-BR',{maximumFractionDigits:1}); }
+function saldoEstoque(faz){
+  const movs = ESTOQUE.filter(e=>e.fazenda===faz);
+  if(!movs.length) return null;
+  const ini = movs.map(e=>e.data).sort()[0];
+  const entradas = movs.reduce((a,e)=>a+(parseFloat(e.litros)||0),0);
+  const hist = JSON.parse(localStorage.getItem('abast_hist')||'[]');
+  const saidas = hist.filter(r=>r.fazenda===faz && (r.data||'')>=ini).reduce((a,r)=>a+(parseFloat(String(r.litros).replace(',','.'))||0),0);
+  return {saldo:entradas-saidas, entradas, saidas, desde:ini};
+}
+function renderAlertaEstoque(){
+  const el=document.getElementById('alerta-estoque'); if(!el) return;
+  const baixos=[];
+  (LISTAS.fazendas||[]).forEach(f=>{ const s=saldoEstoque(f); if(s && s.saldo<ESTOQUE_MINIMO) baixos.push({f,saldo:s.saldo}); });
+  if(!baixos.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='block';
+  el.innerHTML = baixos.map(b=>{
+    const zero = b.saldo<=0;
+    return `<div style="background:${zero?'#C62828':'#E65100'};color:#fff;padding:9px 14px;font-size:13px;font-weight:600;text-align:center">⚠️ ${zero?'Estoque ZERADO':'Estoque baixo'} — ${escHtml(b.f)}: ${fmtL(b.saldo)} L</div>`;
+  }).join('');
+}
+function renderEstoque(){
+  renderAlertaEstoque();
+  const selF=document.getElementById('est-fazenda'); if(!selF) return;
+  const v=selF.value;
+  selF.innerHTML=(LISTAS.fazendas||[]).map(f=>`<option value="${escHtml(f)}">${escHtml(f)}</option>`).join('');
+  if(v && [...selF.options].some(o=>o.value===v)) selF.value=v;
+  const d=document.getElementById('est-data'); if(d && !d.value) d.value=new Date().toISOString().split('T')[0];
+  document.getElementById('estoque-saldos').innerHTML=(LISTAS.fazendas||[]).map(f=>{
+    const s=saldoEstoque(f);
+    if(!s) return `<div style="display:flex;justify-content:space-between;padding:7px 10px;border:1px solid var(--bd);border-radius:7px;margin-bottom:5px;font-size:13px;background:#fff"><b>${escHtml(f)}</b><span style="color:var(--tx3)">sem lançamentos</span></div>`;
+    const baixo=s.saldo<ESTOQUE_MINIMO;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border:1px solid ${baixo?'#E53935':'var(--bd)'};border-radius:7px;margin-bottom:5px;font-size:13px;background:${baixo?'#FDECEA':'#fff'}"><span><b>${escHtml(f)}</b><br><span style="font-size:10px;color:var(--tx3)">desde ${s.desde.split('-').reverse().join('/')}: +${fmtL(s.entradas)} L / −${fmtL(s.saidas)} L</span></span><b style="font-size:16px;color:${baixo?'#C62828':'var(--verde)'}">${fmtL(s.saldo)} L${baixo?' ⚠️':''}</b></div>`;
+  }).join('');
+  const lista=[...ESTOQUE].sort((a,b)=>(b.data||'').localeCompare(a.data||'')||String(b.id).localeCompare(String(a.id))).slice(0,15);
+  const rot={entrada:'Entrada',inicial:'Saldo inicial',ajuste:'Ajuste'};
+  document.getElementById('estoque-lista').innerHTML = lista.length ? lista.map(e=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--bd);border-radius:7px;margin-bottom:5px;font-size:12px;background:#fff"><span style="flex:1">${(e.data||'').split('-').reverse().join('/')} · ${escHtml(e.fazenda)}<br><span style="color:var(--tx3)">${rot[e.tipo]||'Entrada'}${e.responsavel?' · '+escHtml(e.responsavel):''}${e.obs?' · '+escHtml(e.obs):''}</span></span><b>${(parseFloat(e.litros)>0?'+':'')+fmtL(parseFloat(e.litros)||0)} L</b><button onclick="removerEstoque('${e.id}')" style="background:none;border:none;color:#e74c3c;font-size:16px;cursor:pointer">✕</button></div>`).join('') : '<p style="font-size:12px;color:var(--tx3)">Nenhum lançamento ainda. Comece com o “Saldo inicial” de cada fazenda.</p>';
+}
+function adicionarEstoque(){
+  const faz=document.getElementById('est-fazenda').value;
+  const tipo=document.getElementById('est-tipo').value;
+  const data=document.getElementById('est-data').value;
+  let litros=parseFloat(String(document.getElementById('est-litros').value).replace(',','.'));
+  if(!faz||!data||isNaN(litros)||litros===0){ alert('Preencha fazenda, data e litros.'); return; }
+  if(tipo!=='ajuste' && litros<0){ alert('Para tirar litros use “Ajuste (+ ou −)”.'); return; }
+  const e={id:'e'+Date.now(), fazenda:faz, tipo, data, litros,
+    responsavel:document.getElementById('est-resp').value.trim(),
+    obs:document.getElementById('est-obs').value.trim(), pend:true};
+  ESTOQUE.push(e); salvarEstoqueLocal();
+  const tentar=(n)=>{ if(typeof window.salvarEstoqueRemoto==='function') window.salvarEstoqueRemoto(e); else if(n>0) setTimeout(()=>tentar(n-1),1500); };
+  tentar(5);
+  document.getElementById('est-litros').value=''; document.getElementById('est-obs').value='';
+  renderEstoque();
+}
+function removerEstoque(id){
+  if(!confirm('Excluir este lançamento de estoque?')) return;
+  const i=ESTOQUE.findIndex(e=>e.id===id); if(i>=0) ESTOQUE.splice(i,1);
+  salvarEstoqueLocal();
+  if(typeof window.excluirEstoqueRemoto==='function') window.excluirEstoqueRemoto(id);
+  renderEstoque();
+}
+
+renderAlertaEstoque();
 
 // ══════════ CONTROLE DE ACESSO (SENHA) ══════════
 const ABAS_PROTEGIDAS = ['historico','analise','config'];
@@ -885,6 +983,7 @@ function configAposMudar(chave){
 
 function iniciarConfig(){
   garantirTalhoesFazendas();
+  renderEstoque();
   const selTipo = document.getElementById('config-tipo');
   const valorAnterior = selTipo.value;
   let html = '<optgroup label="Listas gerais">';
@@ -1110,6 +1209,7 @@ function enviar(){
     }
   };
   tentarEnviar(5);
+  renderAlertaEstoque();
   irPara(6);
   paginaAtual=6;
   renderSteps();
@@ -1252,6 +1352,7 @@ function excluirRegistro(id){
   localStorage.setItem('abast_pendentes',JSON.stringify(pend));
   // Remove do Firebase
   if(typeof window.excluirDoFirebase==='function') window.excluirDoFirebase(id);
+  renderAlertaEstoque();
   renderHistoricoMain();
 }
 
@@ -1943,6 +2044,7 @@ iniciarHistoricoMain();
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getDatabase, ref, set, onValue, get, remove } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
 // Config embutida — todos os celulares conectam automaticamente
 const FIREBASE_CONFIG = {
@@ -2010,6 +2112,22 @@ window.excluirDoFirebase = async function(id){
   catch(e){ console.warn('Erro ao excluir do Firebase:', e); }
 };
 
+// Estoque: um nó por lançamento (evita sobrescrever entre dispositivos)
+window.salvarEstoqueRemoto = async function(e){
+  if(!window.SYNC.ativo) return;
+  try{
+    const c = Object.assign({}, e); delete c.pend;
+    await set(ref(window.SYNC.db,'config/estoque/'+e.id), JSON.stringify(c));
+    const i = window.ESTOQUE.findIndex(x=>x.id===e.id);
+    if(i>=0){ delete window.ESTOQUE[i].pend; localStorage.setItem('abast_estoque', JSON.stringify(window.ESTOQUE)); }
+  }catch(err){ console.warn('Erro ao salvar estoque remoto:', err); }
+};
+window.excluirEstoqueRemoto = async function(id){
+  if(!window.SYNC.ativo) return;
+  try{ await remove(ref(window.SYNC.db,'config/estoque/'+id)); }
+  catch(err){ console.warn('Erro ao excluir estoque remoto:', err); }
+};
+
 // Escuta mudanças de config vindas de outros dispositivos
 function escutarConfigRemoto(){
   onValue(ref(window.SYNC.db,'config'), snap=>{
@@ -2039,6 +2157,15 @@ function escutarConfigRemoto(){
         localStorage.setItem('abast_listas', JSON.stringify(window.LISTAS));
         atualizado = true;
       }
+      const remEst = [];
+      Object.values(remoto.estoque||{}).forEach(v=>{ try{ remEst.push(JSON.parse(v)); }catch(_){} });
+      const ids = new Set(remEst.map(x=>x.id));
+      const pend = window.ESTOQUE.filter(x=>x.pend && !ids.has(x.id));
+      pend.forEach(x=>window.salvarEstoqueRemoto(x));
+      window.ESTOQUE.length = 0;
+      remEst.concat(pend).forEach(x=>window.ESTOQUE.push(x));
+      localStorage.setItem('abast_estoque', JSON.stringify(window.ESTOQUE));
+      atualizado = true;
     }catch(e){ console.warn('Erro ao aplicar config remoto:', e); }
     if(atualizado && typeof window.onSyncUpdate==='function') window.onSyncUpdate();
   }, err=>{ console.warn('Erro ao ouvir config remoto:', err); });
@@ -2086,6 +2213,10 @@ window.configurarSync = function(){
 async function initSync(){
   try{
     const app = initializeApp(FIREBASE_CONFIG);
+    // Login anônimo: permite fechar o banco para quem não passa pelo app.
+    // Se falhar (login ainda não ativado no Firebase), segue sem login.
+    try{ await signInAnonymously(getAuth(app)); }
+    catch(e){ console.warn('Login anônimo indisponível:', e && e.code); }
     window.SYNC = { ativo:true, db:getDatabase(app) };
     escutarRemoto();
     escutarConfigRemoto();
