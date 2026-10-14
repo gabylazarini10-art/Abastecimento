@@ -389,6 +389,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </select>
         <button onclick="exportarPDF()" style="background:var(--verde);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">📄 PDF</button>
       </div>
+      <select class="filter-select" id="painel-bem" onchange="renderPainel()" style="width:100%;margin-bottom:10px">
+        <option value="">🔎 Filtrar por bem (ex.: TRATOR 165)</option>
+      </select>
       <div class="inp-row" style="margin-bottom:12px">
         <div>
           <label style="font-size:10px;color:var(--tx3);margin-bottom:3px;display:block">DE</label>
@@ -1386,8 +1389,19 @@ function renderPainel(){
   const fz=document.getElementById('painel-fazenda').value;
   const dataIni=document.getElementById('painel-data-ini').value;
   const dataFim=document.getElementById('painel-data-fim').value;
+  // Lista de bens (da fazenda escolhida) para o filtro
+  const selBem=document.getElementById('painel-bem');
+  const bemAtual=selBem.value;
+  const porTipo={};
+  hist.filter(r=>r.bem&&(!fz||r.fazenda===fz)).forEach(r=>{ (porTipo[r.tipo||'OUTROS']=porTipo[r.tipo||'OUTROS']||new Set()).add(r.bem.trim()); });
+  const bensLista=[].concat(...Object.values(porTipo).map(x=>[...x]));
+  const cmp=(a,b)=>a.localeCompare(b,'pt-BR',{numeric:true});
+  selBem.innerHTML='<option value="">🔎 Filtrar por bem (ex.: TRATOR 165)</option>'+Object.keys(porTipo).sort(cmp).map(t=>`<optgroup label="${escHtml(t)}">`+[...porTipo[t]].sort(cmp).map(b=>`<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('')+'</optgroup>').join('');
+  selBem.value=bensLista.includes(bemAtual)?bemAtual:'';
+  const bemSel=selBem.value;
   let dados=hist.filter(r=>{
     if(fz&&r.fazenda!==fz)return false;
+    if(bemSel&&(r.bem||'').trim()!==bemSel)return false;
     if(dataIni||dataFim){const d=r.data||'';if(dataIni&&d&&d<dataIni)return false;if(dataFim&&d&&d>dataFim)return false;}
     return true;
   });
@@ -1397,6 +1411,7 @@ function renderPainel(){
   if(sub){
     const partes=[];
     if(fz) partes.push('Fazenda: '+fz); else partes.push('Todas as fazendas');
+    if(bemSel) partes.push('Bem: '+bemSel);
     if(dataIni) partes.push('De: '+dataIni.split('-').reverse().join('/'));
     if(dataFim) partes.push('Até: '+dataFim.split('-').reverse().join('/'));
     partes.push('Gerado em '+new Date().toLocaleDateString('pt-BR'));
@@ -1645,8 +1660,10 @@ function exportarPDF(){
   const fz=document.getElementById('painel-fazenda').value;
   const dataIni=document.getElementById('painel-data-ini').value;
   const dataFim=document.getElementById('painel-data-fim').value;
+  const bemSel=document.getElementById('painel-bem').value;
   const dados=hist.filter(r=>{
     if(fz&&r.fazenda!==fz)return false;
+    if(bemSel&&(r.bem||'').trim()!==bemSel)return false;
     if(dataIni||dataFim){const d=r.data||'';if(dataIni&&d&&d<dataIni)return false;if(dataFim&&d&&d>dataFim)return false;}
     return true;
   });
@@ -1654,6 +1671,7 @@ function exportarPDF(){
   const fmtN=(n,dec=1)=>n.toLocaleString('pt-BR',{maximumFractionDigits:dec});
   const periodo=[
     fz||'Todas as fazendas',
+    bemSel?'Bem: '+bemSel:'',
     dataIni?'De: '+dataIni.split('-').reverse().join('/'):'',
     dataFim?'Até: '+dataFim.split('-').reverse().join('/'):'',
     'Gerado em '+new Date().toLocaleString('pt-BR'),
