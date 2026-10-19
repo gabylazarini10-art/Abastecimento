@@ -1667,6 +1667,7 @@ function exportarPDF(){
     if(dataIni||dataFim){const d=r.data||'';if(dataIni&&d&&d<dataIni)return false;if(dataFim&&d&&d>dataFim)return false;}
     return true;
   });
+  const bensNoFiltro=new Set(dados.filter(r=>r.bem).map(r=>r.bem.trim().toUpperCase()));
   const totalL=dados.reduce((s,r)=>s+(parseFloat(r.litros)||0),0);
   const fmtN=(n,dec=1)=>n.toLocaleString('pt-BR',{maximumFractionDigits:dec});
   const periodo=[
