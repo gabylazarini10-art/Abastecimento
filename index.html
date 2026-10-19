@@ -1802,12 +1802,25 @@ function exportarPDF(){
   <table><thead><tr><th>Bem</th><th>Tipo</th><th>Eficiência</th><th>Observação</th></tr></thead>
   <tbody>${efRows}</tbody></table>
   ${talhaoSection}
-  <script>window.onload=()=>{ window.print(); }<\/script>
   </body></html>`;
 
-  const win=window.open('','_blank');
-  if(win){ win.document.write(html); win.document.close(); }
-  else alert('Permita pop-ups para gerar o PDF.');
+  // Visualização dentro do próprio app (pop-up costuma ser bloqueado em celular/PWA)
+  const antigo=document.getElementById('pdf-overlay'); if(antigo) antigo.remove();
+  const ov=document.createElement('div');
+  ov.id='pdf-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:#fff;display:flex;flex-direction:column';
+  ov.innerHTML=`<div style="display:flex;gap:8px;padding:10px;background:#1B4332;align-items:center">
+    <button id="pdf-print" style="flex:1;background:#fff;color:#1B4332;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700">🖨️ Imprimir / Salvar PDF</button>
+    <button id="pdf-close" style="background:transparent;color:#fff;border:1.5px solid #fff;border-radius:8px;padding:10px 14px;font-size:14px">✕ Fechar</button>
+  </div><iframe id="pdf-frame" style="flex:1;border:none;width:100%"></iframe>`;
+  document.body.appendChild(ov);
+  const fr=document.getElementById('pdf-frame');
+  fr.srcdoc=html;
+  document.getElementById('pdf-close').onclick=()=>ov.remove();
+  document.getElementById('pdf-print').onclick=()=>{
+    try{ fr.contentWindow.focus(); fr.contentWindow.print(); }
+    catch(e){ alert('Não foi possível abrir a impressão neste aparelho. Tente pelo computador.'); }
+  };
 }
 
 function maiorConsumidorBem(dados){
